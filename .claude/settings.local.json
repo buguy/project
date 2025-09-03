@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude mcp add:*)",
+      "mcp__wonderwhy-er-desktop-commander__search_files",
+      "mcp__wonderwhy-er-desktop-commander__write_file",
+      "mcp__wonderwhy-er-desktop-commander__start_process",
+      "Bash(mkdir:*)",
+      "Bash(npm install)",
+      "Bash(wmic process where:*)",
+      "Bash(PORT=5001 node server.js)",
+      "Bash(node:*)",
+      "Bash(npm install:*)"
+    ],
+    "deny": []
+  }
+}
