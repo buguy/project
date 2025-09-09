@@ -24,6 +24,21 @@ const BugModal = ({ bug, onSave, onClose }) => {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    // Get current user from JWT token
+    const getCurrentUser = () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          return payload.username;
+        } catch (error) {
+          console.error('Error decoding token:', error);
+          return '';
+        }
+      }
+      return '';
+    };
+
     if (bug) {
       setFormData({
         status: bug.status || '',
@@ -43,9 +58,15 @@ const BugModal = ({ bug, onSave, onClose }) => {
         mp4File: bug.mp4File || ''
       });
     } else {
-      // Set default date to today
+      // Set defaults for new bug: current date, current user as tester, and default status
       const today = new Date().toISOString().split('T')[0].replace(/-/g, '/');
-      setFormData(prev => ({ ...prev, date: today }));
+      const currentUser = getCurrentUser();
+      setFormData(prev => ({ 
+        ...prev, 
+        date: today,
+        tester: currentUser,
+        status: 'Not Ready for PIMS'
+      }));
     }
   }, [bug]);
 
@@ -97,8 +118,8 @@ const BugModal = ({ bug, onSave, onClose }) => {
 
         <form onSubmit={handleSubmit} className="bug-form">
           <div className="form-row">
-            <div className="form-group">
-              <label>Status *</label>
+            <div className="form-group required">
+              <label>Status</label>
               <select
                 name="status"
                 value={formData.status}
@@ -106,19 +127,23 @@ const BugModal = ({ bug, onSave, onClose }) => {
                 required
               >
                 <option value="">Select Status</option>
-                <option value="Pass">Pass</option>
+                <option value="Close">Close</option>
                 <option value="Fail">Fail</option>
+                <option value="Pending">Pending</option>
+                <option value="Pass">Pass</option>
+                <option value="Client Comments">Client Comments</option>
+                <option value="Ready for Test">Ready for Test</option>
+                <option value="Ready for PIMS">Ready for PIMS</option>
+                <option value="Not Ready for PIMS">Not Ready for PIMS</option>
               </select>
             </div>
             <div className="form-group">
-              <label>TCID *</label>
+              <label>TCID</label>
               <input
                 type="text"
                 name="tcid"
                 value={formData.tcid}
                 onChange={handleChange}
-                placeholder="e.g., 171637.011"
-                required
               />
             </div>
           </div>
@@ -131,68 +156,68 @@ const BugModal = ({ bug, onSave, onClose }) => {
                 name="pims"
                 value={formData.pims}
                 onChange={handleChange}
-                placeholder="e.g., PIMS-365742"
               />
             </div>
-            <div className="form-group">
-              <label>Tester *</label>
+            <div className="form-group required">
+              <label>Tester</label>
               <input
                 type="text"
                 name="tester"
                 value={formData.tester}
                 onChange={handleChange}
-                placeholder="e.g., Christin"
                 required
               />
             </div>
           </div>
 
           <div className="form-row">
-            <div className="form-group">
-              <label>Date *</label>
+            <div className="form-group required">
+              <label>Date</label>
               <input
                 type="text"
                 name="date"
                 value={formData.date}
                 onChange={handleChange}
-                placeholder="e.g., 2025/06/12"
                 required
               />
             </div>
-            <div className="form-group">
-              <label>Stage *</label>
+            <div className="form-group required">
+              <label>Stage</label>
               <input
                 type="text"
                 name="stage"
                 value={formData.stage}
                 onChange={handleChange}
-                placeholder="e.g., DDPM Win 2.1.1.1"
                 required
               />
             </div>
           </div>
 
-          <div className="form-group">
-            <label>Product/Customer/Likelihood *</label>
-            <input
-              type="text"
+          <div className="form-group required">
+            <label>Product/Customer/Likelihood</label>
+            <select
               name="product_customer_likelihood"
               value={formData.product_customer_likelihood}
               onChange={handleChange}
-              placeholder="e.g., 2_Low/Low/Frequent"
               required
-            />
+            >
+              <option value="">Select Product/Customer/Likelihood</option>
+              <option value="1_High/High/Frequent">1_High/High/Frequent</option>
+              <option value="2_Medium/Medium/Remote">2_Medium/Medium/Remote</option>
+              <option value="2_Low/Low/Frequent">2_Low/Low/Frequent</option>
+              <option value="2_Medium/Low/Remote">2_Medium/Low/Remote</option>
+              <option value="2_Low/High/Reasonably Probable">2_Low/High/Reasonably Probable</option>
+              <option value="3_Low/Low/Remote">3_Low/Low/Remote</option>
+            </select>
           </div>
 
           <div className="form-group">
-            <label>Test Case Name *</label>
+            <label>Test Case Name</label>
             <input
               type="text"
               name="test_case_name"
               value={formData.test_case_name}
               onChange={handleChange}
-              placeholder="e.g., Network KVM Connectivity #15"
-              required
             />
           </div>
 
@@ -203,18 +228,16 @@ const BugModal = ({ bug, onSave, onClose }) => {
               name="chinese"
               value={formData.chinese}
               onChange={handleChange}
-              placeholder="Chinese description"
             />
           </div>
 
-          <div className="form-group">
-            <label>Title *</label>
+          <div className="form-group required">
+            <label>Title</label>
             <input
               type="text"
               name="title"
               value={formData.title}
               onChange={handleChange}
-              placeholder="Brief title of the issue"
               required
             />
           </div>
@@ -226,7 +249,6 @@ const BugModal = ({ bug, onSave, onClose }) => {
               value={formData.system_information}
               onChange={handleChange}
               rows="4"
-              placeholder="DDPM version, PC model, OS version, Graphics Chipset, Monitor, Input Source, etc."
             />
           </div>
 
@@ -237,7 +259,6 @@ const BugModal = ({ bug, onSave, onClose }) => {
               value={formData.description}
               onChange={handleChange}
               rows="6"
-              placeholder="Detailed description of the test case and steps"
             />
           </div>
 
@@ -248,32 +269,9 @@ const BugModal = ({ bug, onSave, onClose }) => {
               name="link"
               value={formData.link}
               onChange={handleChange}
-              placeholder="https://example.com/related-link"
             />
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label>ZIP File URL</label>
-              <input
-                type="url"
-                name="zipFile"
-                value={formData.zipFile}
-                onChange={handleChange}
-                placeholder="https://example.com/files/bug-evidence.zip"
-              />
-            </div>
-            <div className="form-group">
-              <label>MP4 File URL</label>
-              <input
-                type="url"
-                name="mp4File"
-                value={formData.mp4File}
-                onChange={handleChange}
-                placeholder="https://example.com/files/bug-video.mp4"
-              />
-            </div>
-          </div>
 
           {error && <div className="error">{error}</div>}
 

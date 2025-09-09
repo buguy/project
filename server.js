@@ -342,9 +342,14 @@ app.post('/api/import-google-sheet', authenticateToken, async (req, res) => {
         // Process each bug individually with upsert
         for (const bug of validBugs) {
           try {
-            // Use TCID as unique identifier, fallback to title if TCID is empty
+            // Use composite unique identifier to handle duplicate TCIDs properly
+            // Combine multiple fields to ensure each bug is truly unique
             const uniqueQuery = bug.tcid && bug.tcid.trim() !== '' 
-              ? { tcid: bug.tcid }
+              ? { 
+                  tcid: bug.tcid,
+                  title: bug.title,
+                  tester: bug.tester
+                }
               : { title: bug.title, tester: bug.tester, date: bug.date };
             
             const result = await Bug.updateOne(
