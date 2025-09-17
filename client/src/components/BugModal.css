@@ -14,6 +14,11 @@
   animation: fadeIn 0.2s ease-out;
 }
 
+/* Prevent body scroll when modal is open */
+body.modal-open {
+  overflow: hidden;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -159,6 +164,15 @@
   background-color: #ffffff;
   transition: all 0.2s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Specific styling for title textarea field */
+.form-group textarea[name="title"] {
+  min-height: 2.5rem;
+  line-height: 1.4;
+  resize: vertical;
 }
 
 .form-group input:focus,
@@ -197,13 +211,13 @@
 /* Modern monospace design for system information field with emphasis */
 .bug-form .form-group textarea[name="system_information"] {
   font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace !important;
-  background-color: #fff5f5 !important;
-  border: 1px solid #fed7d7 !important;
+  background-color: #f0f8ff !important;
+  border: 1px solid #b3d9ff !important;
   border-radius: 6px !important;
   padding: 0.875rem 1rem !important;
   font-size: 0.875rem !important;
   line-height: 1.5 !important;
-  color: #c53030 !important;
+  color: #1e3a8a !important;
   transition: all 0.2s ease !important;
 }
 
@@ -226,10 +240,10 @@
 
 /* Focus state for system information field */
 .bug-form .form-group textarea[name="system_information"]:focus {
-  border-color: #e53e3e !important;
-  box-shadow: 0 0 0 3px rgba(229, 62, 62, 0.1) !important;
+  border-color: #1366d9 !important;
+  box-shadow: 0 0 0 3px rgba(19, 102, 217, 0.1) !important;
   background-color: #ffffff !important;
-  color: #c53030 !important;
+  color: #1e3a8a !important;
 }
 
 
@@ -240,8 +254,229 @@
 }
 
 .bug-form .form-group textarea[name="system_information"]::placeholder {
-  color: #e53e3e !important;
+  color: #1366d9 !important;
   font-style: italic;
+}
+
+/* Dynamic link fields styling - Modern redesign */
+.links-section {
+  width: 100%;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-top: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.links-section:hover {
+  border-color: #dee2e6;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.no-links-message {
+  color: #6c757d;
+  font-style: italic;
+  text-align: center;
+  padding: 1rem;
+  border: 1px dashed #dee2e6;
+  border-radius: 6px;
+  background-color: #ffffff;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+.links-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.links-header label {
+  margin-bottom: 0;
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.add-link-btn {
+  background: linear-gradient(135deg, #1366d9 0%, #0d47a1 100%);
+  color: white;
+  border: none;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(19, 102, 217, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(0.8);
+}
+
+.links-section:hover .add-link-btn {
+  opacity: 1;
+  visibility: visible;
+  transform: scale(1);
+}
+
+
+.add-link-btn:hover {
+  background: linear-gradient(135deg, #0d47a1 0%, #1366d9 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(19, 102, 217, 0.3);
+}
+
+.add-link-btn:active {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(19, 102, 217, 0.4);
+}
+
+.add-link-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(19, 102, 217, 0.2), 0 4px 12px rgba(19, 102, 217, 0.3);
+}
+
+.link-field-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.875rem;
+  background: white;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 0.5rem;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.link-field-row:hover {
+  border-color: #b3bcc7;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.link-field-row:focus-within {
+  border-color: #1366d9;
+  box-shadow: 0 0 0 3px rgba(19, 102, 217, 0.1);
+}
+
+.link-field-row:last-child {
+  margin-bottom: 0;
+}
+
+.link-field-row input {
+  flex: 1;
+  margin-bottom: 0;
+  border: none;
+  background: transparent;
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  box-shadow: none;
+}
+
+.link-field-row input:focus {
+  outline: none;
+  box-shadow: none;
+  border-color: transparent;
+}
+
+.link-field-row input::placeholder {
+  color: #6c757d;
+  font-style: italic;
+}
+
+.remove-link-btn {
+  background: #f8f9fa;
+  color: #6c757d;
+  border: 1px solid #e9ecef;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.remove-link-btn .remove-icon {
+  display: inline;
+  font-size: 1.125rem;
+  line-height: 1;
+}
+
+.remove-link-btn .remove-text {
+  display: none;
+}
+
+
+.remove-link-btn:hover {
+  background: #fee;
+  color: #dc3545;
+  border-color: #f5c6cb;
+  transform: scale(1.05);
+}
+
+.remove-link-btn:active {
+  transform: scale(0.98);
+}
+
+.remove-link-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.2);
+  border-color: #dc3545;
+}
+
+/* Animation for new link fields */
+@keyframes slideInLink {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+    max-height: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+    max-height: 100px;
+    margin-bottom: 0.875rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+}
+
+.link-field-row {
+  animation: slideInLink 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Empty state styling */
+.links-section:has(.link-field-row input[value=""]:only-of-type) {
+  border-style: dashed;
+  border-color: #dee2e6;
+}
+
+.links-section:has(.link-field-row input[value=""]:only-of-type):hover {
+  border-color: #1366d9;
+  background: #f8f9ff;
 }
 
 
@@ -373,4 +608,254 @@
   .form-actions button {
     width: 100%;
   }
+
+  /* Mobile responsive styles for Links section */
+  .links-section {
+    padding: 1rem;
+    margin-top: 0.25rem;
+  }
+
+  .links-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    margin-bottom: 0.875rem;
+    padding-bottom: 0.625rem;
+  }
+
+  .links-header label {
+    text-align: center;
+  }
+
+  .add-link-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 0.75rem 1.25rem;
+  }
+
+  .link-field-row {
+    flex-direction: column;
+    gap: 0.625rem;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .link-field-row input {
+    padding: 0.875rem 0.75rem;
+    width: 100%;
+  }
+
+  .remove-link-btn {
+    align-self: center;
+    width: 100%;
+    height: 2.5rem;
+    border-radius: 8px;
+  }
+
+  .remove-link-btn .remove-icon {
+    display: none;
+  }
+  
+  .remove-link-btn .remove-text {
+    display: inline;
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
 }
+
+/* Comment Mode Styles */
+.comment-mode-info,
+.meeting-mode-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.bug-info-display {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 8px;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+}
+
+.bug-info-display h4 {
+  margin: 0 0 0.75rem 0;
+  color: #1f2937;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.bug-meta-display {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.bug-meta-display span {
+  color: #4b5563;
+}
+
+.bug-meta-display strong {
+  color: #1f2937;
+}
+
+.existing-comments,
+.existing-meetings {
+  margin-bottom: 1rem;
+}
+
+.existing-comments label,
+.existing-meetings label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.comments-display,
+.meetings-display {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 0.75rem;
+  max-height: 150px;
+  overflow-y: auto;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: #4b5563;
+}
+
+/* Chinese Field with AI Translate Button */
+.chinese-field-header {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  margin-bottom: 0.625rem;
+  gap: 1rem;
+}
+
+.chinese-field-header label {
+  margin-bottom: 0;
+}
+
+/* Description Field with Grammar Correction Button */
+.description-field-header {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  margin-bottom: 0.625rem;
+  gap: 1rem;
+}
+
+.description-field-header label {
+  margin-bottom: 0;
+}
+
+.translate-btn {
+  background: transparent;
+  color: #667eea;
+  border: 1px solid #667eea;
+  padding: 0.2rem 0.3rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  white-space: nowrap;
+  width: 20%;
+  margin-left: auto;
+}
+
+.translate-btn:hover:not(:disabled) {
+  background: #667eea;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.translate-btn:disabled {
+  background: transparent;
+  color: #9ca3af;
+  border-color: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.translate-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
+.translate-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.grammar-btn {
+  background: transparent;
+  color: #10b981;
+  border: 1px solid #10b981;
+  padding: 0.2rem 0.3rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  white-space: nowrap;
+  width: 20%;
+  margin-left: auto;
+}
+
+.grammar-btn:hover:not(:disabled) {
+  background: #10b981;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.grammar-btn:disabled {
+  background: transparent;
+  color: #9ca3af;
+  border-color: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.grammar-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.grammar-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Title Field with Chinese Translation Display */
+.title-field-header {
+  margin-bottom: 0.625rem;
+}
+
+.title-label-section {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.title-label-section label {
+  margin-bottom: 0;
+}
+
+.chinese-translation-display {
+  color: #6b7280;
+  font-size: 0.8rem;
+  font-weight: 400;
+  white-space: nowrap;
+}
+

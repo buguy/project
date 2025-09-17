@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import BugModal from './BugModal';
+import LogsPage from './LogsPage';
+import ConfirmationModal from './ConfirmationModal';
 import './BugList.css';
 
 const BugList = () => {
@@ -10,11 +12,13 @@ const BugList = () => {
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingBug, setEditingBug] = useState(null);
-  const [expandedBugs, setExpandedBugs] = useState(new Set());
+  const [expandedBugId, setExpandedBugId] = useState(null);
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({});
+  const [filteredPage, setFilteredPage] = useState(1);
+  const itemsPerPage = 15;
   
   // Import states
   const [isImporting, setIsImporting] = useState(false);
@@ -28,28 +32,89 @@ const BugList = () => {
   const [selectedStage, setSelectedStage] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  
+  // Operation logs states
+  const [operationLogs, setOperationLogs] = useState([]);
+  const [showLogsPage, setShowLogsPage] = useState(false);
+  
+  // Confirmation modal states
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmModalConfig, setConfirmModalConfig] = useState({
+    title: '',
+    message: '',
+    type: 'default',
+    onConfirm: null
+  });
+  
+  // Filter options from backend
+  const [filterOptions, setFilterOptions] = useState({
+    testers: [],
+    statuses: [],
+    stages: []
+  });
+
+  // Debounce timeout reference
+  const debounceTimeout = React.useRef(null);
 
   useEffect(() => {
     fetchBugs(currentPage);
   }, [currentPage]);
 
-  const fetchBugs = async (page = 1) => {
+  // Fetch filter options and logs on component mount
+  useEffect(() => {
+    fetchFilterOptions();
+    fetchOperationLogs();
+  }, []);
+
+  const fetchFilterOptions = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/bugs/filters', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setFilterOptions(response.data);
+    } catch (error) {
+      console.error('Error fetching filter options:', error);
+    }
+  };
+
+  const fetchOperationLogs = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/logs?limit=50', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setOperationLogs(response.data);
+    } catch (error) {
+      console.error('Error fetching operation logs:', error);
+    }
+  };
+
+  const fetchBugs = async (page = 1, fetchAll = false) => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
+      
+      const params = {
+        ...(fetchAll ? { all: 'true' } : { page, limit: 15 }),
+        // Add search parameters
+        ...(searchQuery && { search: searchQuery }),
+        ...(selectedPims && { pims: selectedPims }),
+        ...(selectedTester && { tester: selectedTester }),
+        ...(selectedStatus && { status: selectedStatus }),
+        ...(selectedStage && { stage: selectedStage }),
+        ...(startDate && { startDate }),
+        ...(endDate && { endDate })
+      };
+      
       const response = await axios.get('/api/bugs', {
         headers: { Authorization: `Bearer ${token}` },
-        params: { page, limit: 15 }
+        params
       });
       setBugs(response.data.bugs);
       setFilteredBugs(response.data.bugs);
       setPagination(response.data.pagination);
       
-      // Debug: Log the first 3 bugs to verify order
-      console.log('📅 First 3 bugs from API (should be latest dates first):');
-      response.data.bugs.slice(0, 3).forEach((bug, index) => {
-        console.log(`${index + 1}. ${bug.date} - ${bug.title?.substring(0, 40) || 'No Title'}...`);
-      });
     } catch (error) {
       setError('Failed to fetch bugs');
     } finally {
@@ -57,27 +122,31 @@ const BugList = () => {
     }
   };
 
-  // Filter logic
-  useEffect(() => {
-    let filtered = bugs.filter(bug => {
-      const matchesSearch = !searchQuery || 
-        bug.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        bug.chinese?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        bug.description?.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const matchesTester = !selectedTester || bug.tester === selectedTester;
-      const matchesStatus = !selectedStatus || bug.status === selectedStatus;
-      const matchesPims = !selectedPims || bug.pims.includes(selectedPims);
-      const matchesStage = !selectedStage || bug.stage === selectedStage;
-      
-      const matchesDateRange = (!startDate || new Date(bug.date.replace(/\//g, '-')) >= new Date(startDate)) &&
-                              (!endDate || new Date(bug.date.replace(/\//g, '-')) <= new Date(endDate));
-      
-      return matchesSearch && matchesTester && matchesStatus && matchesPims && matchesStage && matchesDateRange;
-    });
+  // Manual search function (triggered by button click or Enter key)
+  const performSearch = useCallback(() => {
+    const hasFilters = searchQuery || selectedTester || selectedStatus || selectedPims || selectedStage || startDate || endDate;
     
-    setFilteredBugs(filtered);
-  }, [bugs, searchQuery, selectedTester, selectedStatus, selectedPims, selectedStage, startDate, endDate]);
+    if (hasFilters) {
+      fetchBugs(1, true);
+    } else {
+      fetchBugs(1, false);
+    }
+    setCurrentPage(1);
+  }, [searchQuery, selectedTester, selectedStatus, selectedPims, selectedStage, startDate, endDate]);
+
+  // Trigger immediate search ONLY for dropdown changes (Tester, Status, Stage, dates)
+  useEffect(() => {
+    if (loading) return; 
+    
+    const hasFilters = searchQuery || selectedTester || selectedStatus || selectedPims || selectedStage || startDate || endDate;
+    
+    if (hasFilters) {
+      fetchBugs(1, true);
+    } else {
+      fetchBugs(1, false);
+    }
+    setCurrentPage(1);
+  }, [selectedTester, selectedStatus, selectedStage, startDate, endDate]);
 
   const handleAddBug = () => {
     setEditingBug(null);
@@ -89,17 +158,113 @@ const BugList = () => {
     setShowModal(true);
   };
 
-  const handleDeleteBug = async (id) => {
-    if (window.confirm('Are you sure you want to delete this bug record?')) {
-      try {
-        const token = localStorage.getItem('token');
-        await axios.delete(`/api/bugs/${id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        fetchBugs();
-      } catch (error) {
-        setError('Failed to delete bug');
+  const handleCommentBug = (bug) => {
+    setEditingBug({ ...bug, isCommentMode: true });
+    setShowModal(true);
+  };
+
+  const handleMeetingBug = (bug) => {
+    setEditingBug({ ...bug, isMeetingMode: true });
+    setShowModal(true);
+  };
+
+  const handleCopyBug = async (bug) => {
+    setConfirmModalConfig({
+      title: 'Copy Bug',
+      message: `Are you sure you want to copy the bug: "${bug.title}"?\n\nThis will create a duplicate with updated tester and date.`,
+      type: 'warning',
+      confirmText: 'Copy Bug',
+      onConfirm: () => performCopyBug(bug)
+    });
+    setShowConfirmModal(true);
+  };
+
+  const performCopyBug = async (bug) => {
+    setShowConfirmModal(false);
+    
+    try {
+      const token = localStorage.getItem('token');
+      
+      // Get current user
+      const userResponse = await axios.get('/api/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const currentUser = userResponse.data.username;
+      
+      // Get current date in the same format as the original bug
+      const today = new Date().toISOString().split('T')[0].replace(/-/g, '/');
+      
+      // Create a copy of the bug with updated tester and date
+      const bugCopy = {
+        ...bug,
+        tester: currentUser,
+        date: today,
+        // Remove the _id and timestamps to create a new record
+        _id: undefined,
+        createdAt: undefined,
+        updatedAt: undefined,
+        __v: undefined
+      };
+      
+      // Create the new bug
+      const response = await axios.post('/api/bugs', bugCopy, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      // Log the copy operation with bug data
+      await axios.post('/api/logs', {
+        operation: 'COPY',
+        target: response.data.id,
+        targetTitle: bug.title,
+        details: `Copied bug: ${bug.tcid} - ${bug.title}`,
+        bugData: {
+          pims: bug.pims,
+          tester: currentUser, // Use the current user as tester for the copy
+          date: today,
+          tcid: bug.tcid
+        }
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      // Refresh the bug list to show the new bug at the top
+      // Clear any active filters to ensure the new bug is visible
+      if (hasActiveFilters()) {
+        clearFilters();
+      } else {
+        fetchBugs(1);
+        setCurrentPage(1);
       }
+      fetchOperationLogs(); // Refresh logs after copy
+    } catch (error) {
+      console.error('Copy bug error:', error);
+      setError('Failed to copy bug');
+    }
+  };
+
+  const handleDeleteBug = async (bug) => {
+    setConfirmModalConfig({
+      title: 'Delete Bug',
+      message: `Are you sure you want to DELETE the bug: "${bug.title}"?\n\nThis action cannot be undone.`,
+      type: 'danger',
+      confirmText: 'Delete Bug',
+      onConfirm: () => performDeleteBug(bug)
+    });
+    setShowConfirmModal(true);
+  };
+
+  const performDeleteBug = async (bug) => {
+    setShowConfirmModal(false);
+    
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`/api/bugs/${bug._id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      fetchBugs();
+      fetchOperationLogs(); // Refresh logs after delete
+    } catch (error) {
+      setError('Failed to delete bug');
     }
   };
 
@@ -107,29 +272,76 @@ const BugList = () => {
     setShowModal(false);
     setEditingBug(null);
     fetchBugs(currentPage);
+    fetchOperationLogs(); // Refresh logs after any bug operation
   };
 
   const handlePageChange = (page) => {
-    setCurrentPage(page);
-    setExpandedBugs(new Set()); // Clear expanded state when changing pages
+    if (hasActiveFilters()) {
+      setFilteredPage(page);
+    } else {
+      setCurrentPage(page);
+    }
+    setExpandedBugId(null); // Clear expanded state when changing pages
   };
 
   const handlePrevPage = () => {
-    if (pagination.hasPrevPage) {
-      handlePageChange(pagination.prevPage);
+    const paginationInfo = getFilteredPaginationInfo();
+    if (paginationInfo.hasPrevPage) {
+      handlePageChange(paginationInfo.currentPage - 1);
     }
   };
 
   const handleNextPage = () => {
-    if (pagination.hasNextPage) {
-      handlePageChange(pagination.nextPage);
+    const paginationInfo = getFilteredPaginationInfo();
+    if (paginationInfo.hasNextPage) {
+      handlePageChange(paginationInfo.currentPage + 1);
     }
+  };
+
+  // Check if any filters are active
+  const hasActiveFilters = () => {
+    return searchQuery || selectedTester || selectedStatus || selectedPims || selectedStage || startDate || endDate;
+  };
+  
+  // Get bugs for current page when filters are active
+  const getDisplayedBugs = () => {
+    if (!hasActiveFilters()) {
+      return filteredBugs; // Show server-side paginated results
+    }
+    
+    // Client-side pagination for filtered results
+    const startIndex = (filteredPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredBugs.slice(startIndex, endIndex);
+  };
+  
+  // Get pagination info for filtered results
+  const getFilteredPaginationInfo = () => {
+    if (!hasActiveFilters()) {
+      return {
+        totalPages: pagination.totalPages || 1,
+        currentPage: pagination.currentPage || 1,
+        totalItems: pagination.totalBugs || bugs.length,
+        hasNextPage: pagination.hasNextPage,
+        hasPrevPage: pagination.hasPrevPage
+      };
+    }
+    
+    const totalPages = Math.ceil(filteredBugs.length / itemsPerPage);
+    return {
+      totalPages: totalPages,
+      currentPage: filteredPage,
+      totalItems: filteredBugs.length,
+      hasNextPage: filteredPage < totalPages,
+      hasPrevPage: filteredPage > 1
+    };
   };
 
   const getPageNumbers = () => {
     const pages = [];
-    const totalPages = pagination.totalPages || 1;
-    const currentPageNum = pagination.currentPage || 1;
+    const paginationInfo = getFilteredPaginationInfo();
+    const totalPages = paginationInfo.totalPages;
+    const currentPageNum = paginationInfo.currentPage;
     
     // Show 5 pages at a time
     let startPage = Math.max(1, currentPageNum - 2);
@@ -220,34 +432,42 @@ const BugList = () => {
   const formatDescription = (desc) => {
     if (!desc) return '';
     return desc
-      .replace(/(\d+\.)\s*\n/g, '$1 ') // Fix numbered items followed by newlines
-      .replace(/(Result:)/gi, '<span class="description-title">$1</span>') // Make Result: bold
-      .replace(/(Expectation:)/gi, '<span class="description-title">$1</span>') // Make Expectation: bold
-      .replace(/\n/g, '<br>');
+      .replace(/(\d+\.)\s*\n\s*/g, '$1 ') // Fix numbered items followed by newlines and spaces
+      .replace(/(\d+\.)\s*(?=\d+\.)/g, '$1<br>') // Add line breaks between numbered items
+      .replace(/(Testcase:)/gi, '<span class="description-title">$1</span><br>') // Make Testcase: bold with line break
+      .replace(/(Result:)/gi, '<br><span class="description-title">$1</span><br>') // Make Result: bold with line breaks
+      .replace(/(Expectation:)/gi, '<br><span class="description-title">$1</span><br>') // Make Expectation: bold with line breaks
+      .replace(/\n\s*\n/g, '<br><br>') // Convert double newlines to double breaks
+      .replace(/\n/g, '<br>') // Convert single newlines to breaks
+      .replace(/<br>\s*<br>\s*<br>/g, '<br><br>'); // Clean up excessive line breaks
   };
 
   const toggleBugExpansion = (bugId) => {
-    setExpandedBugs(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(bugId)) {
-        newSet.delete(bugId);
-      } else {
-        newSet.add(bugId);
+    setExpandedBugId(prev => {
+      // If clicking the same bug that's already expanded, collapse it
+      if (prev === bugId) {
+        return null;
       }
-      return newSet;
+      // Otherwise, expand this bug (and automatically close any other expanded bug)
+      return bugId;
     });
   };
 
   const isBugExpanded = (bugId) => {
-    return expandedBugs.has(bugId);
+    return expandedBugId === bugId;
   };
 
-  // Get unique values for dropdowns
-  const getUniqueTesters = () => [...new Set(bugs.map(bug => bug.tester))].sort();
-  const getUniqueStatuses = () => [...new Set(bugs.map(bug => bug.status))].sort();
-  const getUniqueStages = () => [...new Set(bugs.map(bug => bug.stage))].sort();
+  // Get unique values for dropdowns from backend filter options
+  const getUniqueTesters = () => filterOptions.testers;
+  const getUniqueStatuses = () => filterOptions.statuses;
+  const getUniqueStages = () => filterOptions.stages;
 
   const clearFilters = () => {
+    // Clear timeout if active
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current);
+    }
+    
     setSearchQuery('');
     setSelectedTester('');
     setSelectedStatus('');
@@ -255,6 +475,11 @@ const BugList = () => {
     setSelectedStage('');
     setStartDate('');
     setEndDate('');
+    setFilteredPage(1);
+    setCurrentPage(1);
+    
+    // Explicitly fetch all bugs without filters (reset to default state)
+    fetchBugs(1, false);
   };
 
   const getFileButtonsFromLink = (bug) => {
@@ -294,6 +519,41 @@ const BugList = () => {
     }
   };
 
+  const handleOpenLogsPage = () => {
+    setShowLogsPage(true);
+  };
+
+  const handleCloseLogsPage = () => {
+    setShowLogsPage(false);
+  };
+
+  const formatLogEntry = (log) => {
+    // Format: CRUD Action..PIMS(if exist) Tester Date
+    const action = log.operation;
+    let pims = log.bugData?.pims ? log.bugData.pims : '';
+    
+    // Handle cases where PIMS might already have "PIMS-" prefix
+    if (pims && !pims.startsWith('PIMS-')) {
+      pims = `PIMS-${pims}`;
+    }
+    
+    const tester = log.bugData?.tester || log.user;
+    const date = new Date(log.timestamp).toLocaleString();
+    
+    // Create the first line
+    const firstLine = `${action}${pims ? `_${pims}` : ''}_${tester}_${date}`;
+    
+    // Second line: Title (remove prefix [...])
+    let title = log.targetTitle || log.target;
+    // Remove any prefix in brackets like [TCID-123] or [Bug-456]
+    title = title.replace(/^\[[^\]]*\]\s*/, '');
+    
+    return {
+      firstLine,
+      title
+    };
+  };
+
   const showCopiedMessage = (buttonElement) => {
     const originalText = buttonElement.textContent;
     buttonElement.textContent = 'Copied!';
@@ -314,7 +574,7 @@ const BugList = () => {
     <div className="bug-list-container">
       <div className="bug-list-header">
         <div className="title-group">
-          <h2>DDM/DDPM: {pagination.totalBugs || bugs.length} bugs total</h2>
+          <h2>DDM/DDPM: {pagination.totalBugs || bugs.length} bugs total{hasActiveFilters() ? ` (${filteredBugs.length} shown)` : ''}</h2>
           <button onClick={handleAddBug} className="add-btn">
             Add New Bug
           </button>
@@ -340,7 +600,7 @@ const BugList = () => {
         {/* Main Content */}
         <div className="bug-main-content">
           <div className="blog-container">
-            {filteredBugs.length === 0 ? (
+            {getDisplayedBugs().length === 0 ? (
               <div className="no-data">
                 {bugs.length === 0 ? 
                   "No bug records found. Click \"Add New Bug\" to create one." :
@@ -348,7 +608,7 @@ const BugList = () => {
                 }
               </div>
             ) : (
-              filteredBugs.map((bug) => (
+              getDisplayedBugs().map((bug) => (
                   <article key={bug._id} className="bug-card">
                     <div className="bug-header">
                       <div className="bug-meta">
@@ -368,7 +628,25 @@ const BugList = () => {
                           Edit
                         </button>
                         <button
-                          onClick={() => handleDeleteBug(bug._id)}
+                          onClick={() => handleCommentBug(bug)}
+                          className="comment-btn"
+                        >
+                          Comment
+                        </button>
+                        <button
+                          onClick={() => handleMeetingBug(bug)}
+                          className="meeting-btn"
+                        >
+                          Meeting
+                        </button>
+                        <button
+                          onClick={() => handleCopyBug(bug)}
+                          className="copy-btn"
+                        >
+                          Copy
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBug(bug)}
                           className="delete-btn"
                         >
                           Delete
@@ -444,140 +722,246 @@ const BugList = () => {
                     </button>
                   ))}
                 </div>
-                    </div>
+
+                {bug.notes && (
+                  <div className="bug-comments">
+                    <div className="comments-label">Comments:</div>
+                    <div className="comments-content">{bug.notes}</div>
+                  </div>
+                )}
+
+                {bug.meetings && (
+                  <div className="bug-meetings">
+                    <div className="meetings-label">Meeting Notes:</div>
+                    <div className="meetings-content">{bug.meetings}</div>
+                  </div>
+                )}
+              </div>
                   </article>
               ))
             )}
           </div>
           
           {/* Pagination Controls */}
-          {pagination.totalPages > 1 && (
-            <div className="pagination-container">
-              <div className="pagination-single-line">
-                <span className="pagination-info-inline">
-                  Showing {((pagination.currentPage - 1) * 15) + 1}-{Math.min(pagination.currentPage * 15, pagination.totalBugs)} of {pagination.totalBugs}
-                </span>
-                
-                <span 
-                  onClick={handlePrevPage} 
-                  className={`pagination-nav ${!pagination.hasPrevPage ? 'disabled' : ''}`}
-                >
-                  ←
-                </span>
-                
-                {getPageNumbers().map(pageNum => (
-                  <span
-                    key={pageNum}
-                    onClick={() => handlePageChange(pageNum)}
-                    className={`pagination-page ${pageNum === pagination.currentPage ? 'active' : ''}`}
-                  >
-                    {pageNum}
+          {(() => {
+            const paginationInfo = getFilteredPaginationInfo();
+            return paginationInfo.totalPages > 1 && (
+              <div className="pagination-container">
+                <div className="pagination-single-line">
+                  <span className="pagination-info-inline">
+                    {hasActiveFilters() ? 
+                      `Showing ${((paginationInfo.currentPage - 1) * itemsPerPage) + 1}-${Math.min(paginationInfo.currentPage * itemsPerPage, paginationInfo.totalItems)} of ${paginationInfo.totalItems} filtered results` :
+                      `Showing ${((paginationInfo.currentPage - 1) * itemsPerPage) + 1}-${Math.min(paginationInfo.currentPage * itemsPerPage, paginationInfo.totalItems)} of ${paginationInfo.totalItems}`
+                    }
                   </span>
-                ))}
-                
-                <span 
-                  onClick={handleNextPage} 
-                  className={`pagination-nav ${!pagination.hasNextPage ? 'disabled' : ''}`}
-                >
-                  →
-                </span>
-                
-                <span className="pagination-total-inline">
-                  Page {pagination.currentPage} of {pagination.totalPages}
-                </span>
+                  
+                  <span 
+                    onClick={handlePrevPage} 
+                    className={`pagination-nav ${!paginationInfo.hasPrevPage ? 'disabled' : ''}`}
+                  >
+                    ←
+                  </span>
+                  
+                  {getPageNumbers().map(pageNum => (
+                    <span
+                      key={pageNum}
+                      onClick={() => handlePageChange(pageNum)}
+                      className={`pagination-page ${pageNum === paginationInfo.currentPage ? 'active' : ''}`}
+                    >
+                      {pageNum}
+                    </span>
+                  ))}
+                  
+                  <span 
+                    onClick={handleNextPage} 
+                    className={`pagination-nav ${!paginationInfo.hasNextPage ? 'disabled' : ''}`}
+                  >
+                    →
+                  </span>
+                  
+                  <span className="pagination-total-inline">
+                    Page {paginationInfo.currentPage} of {paginationInfo.totalPages}
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
-        {/* Right Sidebar */}
-        <div className="bug-sidebar">
-          <div className="sidebar-header">
-            <h3>🔍 Fast Query</h3>
-          </div>
-          
-          <div className="filter-section">
-            <div className="filter-group">
-              <input
-                type="text"
-                placeholder="Search bugs..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="search-input"
-              />
+        {/* Right Column - Search & Logs */}
+        <div className="right-column">
+          {/* Search & Filter Section */}
+          <div className="bug-sidebar">
+            <div className="sidebar-header">
+              <h3>🔍 Search & Filter</h3>
+              {loading && <div className="search-indicator">⚡ Searching...</div>}
             </div>
-
-            <div className="filter-group">
-              <label>Tester</label>
-              <select value={selectedTester} onChange={(e) => setSelectedTester(e.target.value)}>
-                <option value="">All Testers</option>
-                {getUniqueTesters().map(tester => (
-                  <option key={tester} value={tester}>{tester}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="filter-group">
-              <label>Status</label>
-              <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
-                <option value="">All Status</option>
-                {getUniqueStatuses().map(status => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="filter-group">
-              <label>PIMS</label>
-              <input
-                type="text"
-                placeholder="Enter PIMS number..."
-                value={selectedPims}
-                onChange={(e) => setSelectedPims(e.target.value)}
-                className="filter-input"
-              />
-            </div>
-
-            <div className="filter-group">
-              <label>Stage</label>
-              <select value={selectedStage} onChange={(e) => setSelectedStage(e.target.value)}>
-                <option value="">All Stages</option>
-                {getUniqueStages().map(stage => (
-                  <option key={stage} value={stage}>{stage}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="filter-group">
-              <label>Date Range</label>
-              <div className="date-range-inline">
-                <div className="date-input-container">
+            
+            <div className="filter-section">
+              <div className="filter-group">
+                <div className="search-input-group">
                   <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="date-input-inline"
+                    type="text"
+                    placeholder="Search bugs..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && performSearch()}
+                    className="search-input"
+                    title="Search in title, Chinese text, description, notes, and system information"
                   />
-                  <span className={`date-placeholder-text ${startDate ? 'hidden' : ''}`}>Start</span>
-                  <span className="date-icon">📅</span>
-                </div>
-                <div className="date-input-container">
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="date-input-inline"
-                  />
-                  <span className={`date-placeholder-text ${endDate ? 'hidden' : ''}`}>End</span>
-                  <span className="date-icon">📅</span>
+                  <button 
+                    onClick={performSearch}
+                    className="search-button"
+                    disabled={loading}
+                    title="Click to search"
+                  >
+                    🔍
+                  </button>
                 </div>
               </div>
+
+              <div className="filter-group">
+                <label>Tester</label>
+                <select value={selectedTester} onChange={(e) => setSelectedTester(e.target.value)}>
+                  <option value="">All Testers</option>
+                  {getUniqueTesters().map(tester => (
+                    <option key={tester} value={tester}>{tester}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="filter-group">
+                <label>Status</label>
+                <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
+                  <option value="">All Status</option>
+                  {getUniqueStatuses().map(status => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="filter-group">
+                <label>PIMS</label>
+                <div className="search-input-group">
+                  <input
+                    type="text"
+                    placeholder="Enter PIMS number..."
+                    value={selectedPims}
+                    onChange={(e) => setSelectedPims(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && performSearch()}
+                    className="filter-input"
+                    title="Enter PIMS number and click search or press Enter"
+                  />
+                  <button 
+                    onClick={performSearch}
+                    className="search-button"
+                    disabled={loading}
+                    title="Click to search"
+                  >
+                    🔍
+                  </button>
+                </div>
+              </div>
+
+              <div className="filter-group">
+                <label>Stage</label>
+                <select value={selectedStage} onChange={(e) => setSelectedStage(e.target.value)}>
+                  <option value="">All Stages</option>
+                  {getUniqueStages().map(stage => (
+                    <option key={stage} value={stage}>{stage}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="filter-group">
+                <label>Date Range</label>
+                <div className="date-range-inline">
+                  <div className="date-input-container">
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="date-input-inline"
+                    />
+                    <span className={`date-placeholder-text ${startDate ? 'hidden' : ''}`}>Start</span>
+                    <span className="date-icon">📅</span>
+                  </div>
+                  <div className="date-input-container">
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="date-input-inline"
+                    />
+                    <span className={`date-placeholder-text ${endDate ? 'hidden' : ''}`}>End</span>
+                    <span className="date-icon">📅</span>
+                  </div>
+                </div>
+              </div>
+
+
+              <div className="filter-actions">
+                <button onClick={clearFilters} className="clear-btn">Clear All Filters</button>
+              </div>
             </div>
+          </div>
 
-
-            <div className="filter-actions">
-              <button onClick={fetchBugs} className="search-btn">Search</button>
-              <button onClick={clearFilters} className="clear-btn">Clear</button>
+          {/* Operation Logs Section */}
+          <div className="operation-logs-independent">
+            <div className="logs-header">
+              <button 
+                onClick={handleOpenLogsPage} 
+                className="view-logs-btn"
+                title="View all logs with filters"
+              >
+                📋 View All Logs
+              </button>
+            </div>
+            
+            <div className="logs-container">
+              {operationLogs.length === 0 ? (
+                <div className="no-logs">No operation logs available</div>
+              ) : (
+                <div className="logs-list">
+                  {operationLogs.map((log, index) => {
+                    const action = log.operation;
+                    let pims = log.bugData?.pims ? log.bugData.pims : '';
+                    
+                    // Handle cases where PIMS might already have "PIMS-" prefix
+                    if (pims && !pims.startsWith('PIMS-')) {
+                      pims = `PIMS-${pims}`;
+                    }
+                    
+                    // If no PIMS, show "Ready For PIMS"
+                    const pimsDisplay = pims || 'Ready For PIMS';
+                    
+                    const tester = log.bugData?.tester || log.user;
+                    const date = new Date(log.timestamp).toLocaleString('en-US', {
+                      year: 'numeric',
+                      month: 'numeric', 
+                      day: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: true
+                    });
+                    
+                    return (
+                      <div key={log._id || index} className="log-item">
+                        <div className="log-single-line">
+                          <span className={`log-operation ${log.operation.toLowerCase()}`}>
+                            {action}
+                          </span>
+                          <span className="log-pims">
+                            {pimsDisplay}_
+                          </span>
+                          <span className="log-tester">{tester}</span>
+                          <span className="log-date">{date}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -588,6 +972,24 @@ const BugList = () => {
           bug={editingBug}
           onSave={handleBugSaved}
           onClose={() => setShowModal(false)}
+        />
+      )}
+
+      {showLogsPage && (
+        <LogsPage
+          onClose={handleCloseLogsPage}
+        />
+      )}
+
+      {showConfirmModal && (
+        <ConfirmationModal
+          isOpen={showConfirmModal}
+          title={confirmModalConfig.title}
+          message={confirmModalConfig.message}
+          type={confirmModalConfig.type}
+          confirmText={confirmModalConfig.confirmText}
+          onConfirm={confirmModalConfig.onConfirm}
+          onCancel={() => setShowConfirmModal(false)}
         />
       )}
     </div>

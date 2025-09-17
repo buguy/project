@@ -7,7 +7,13 @@ const bugSchema = new mongoose.Schema({
   },
   tcid: {
     type: String,
-    required: true
+    required: true,
+    validate: {
+      validator: function(v) {
+        return v && v.trim().length > 0;
+      },
+      message: 'TCID cannot be empty'
+    }
   },
   pims: {
     type: String
@@ -26,11 +32,23 @@ const bugSchema = new mongoose.Schema({
   },
   product_customer_likelihood: {
     type: String,
-    required: true
+    required: true,
+    validate: {
+      validator: function(v) {
+        return v && v.trim().length > 0;
+      },
+      message: 'Product/Customer/Likelihood cannot be empty'
+    }
   },
   test_case_name: {
     type: String,
-    required: true
+    required: true,
+    validate: {
+      validator: function(v) {
+        return v && v.trim().length > 0;
+      },
+      message: 'Test Case Name cannot be empty'
+    }
   },
   chinese: {
     type: String
@@ -48,11 +66,11 @@ const bugSchema = new mongoose.Schema({
   link: {
     type: String
   },
-  zipFile: {
-    type: String  // URL or path to zip file
+  notes: {
+    type: String  // Notes field for comments from Excel/PIMS
   },
-  mp4File: {
-    type: String  // URL or path to mp4 file
+  meetings: {
+    type: String  // Meeting notes field
   }
 }, {
   timestamps: true
