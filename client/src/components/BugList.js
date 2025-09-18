@@ -3,6 +3,17 @@ import axios from 'axios';
 import BugModal from './BugModal';
 import LogsPage from './LogsPage';
 import ConfirmationModal from './ConfirmationModal';
+import {
+  TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  Button,
+  Box,
+  Typography,
+  InputLabel
+} from '@mui/material';
+import FilterListIcon from '@mui/icons-material/FilterList';
 import './BugList.css';
 
 const BugList = () => {
@@ -32,7 +43,7 @@ const BugList = () => {
   const [selectedStage, setSelectedStage] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  
+
   // Operation logs states
   const [operationLogs, setOperationLogs] = useState([]);
   const [showLogsPage, setShowLogsPage] = useState(false);
@@ -65,6 +76,7 @@ const BugList = () => {
     fetchFilterOptions();
     fetchOperationLogs();
   }, []);
+
 
   const fetchFilterOptions = async () => {
     try {
@@ -462,12 +474,13 @@ const BugList = () => {
   const getUniqueStatuses = () => filterOptions.statuses;
   const getUniqueStages = () => filterOptions.stages;
 
-  const clearFilters = () => {
+  const clearFilters = async () => {
     // Clear timeout if active
     if (debounceTimeout.current) {
       clearTimeout(debounceTimeout.current);
     }
-    
+
+    // Clear all filter states
     setSearchQuery('');
     setSelectedTester('');
     setSelectedStatus('');
@@ -477,9 +490,26 @@ const BugList = () => {
     setEndDate('');
     setFilteredPage(1);
     setCurrentPage(1);
-    
-    // Explicitly fetch all bugs without filters (reset to default state)
-    fetchBugs(1, false);
+
+    // Immediately fetch all bugs without any filters
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+
+      const response = await axios.get('/api/bugs', {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { page: 1, limit: 15 } // No filter parameters
+      });
+
+      setBugs(response.data.bugs);
+      setFilteredBugs(response.data.bugs);
+      setPagination(response.data.pagination);
+
+    } catch (error) {
+      setError('Failed to fetch bugs');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getFileButtonsFromLink = (bug) => {
@@ -580,8 +610,8 @@ const BugList = () => {
           </button>
         </div>
         <div className="header-buttons">
-          <button 
-            onClick={handleGoogleSheetImport} 
+          <button
+            onClick={handleGoogleSheetImport}
             className="import-btn"
             disabled={isImporting}
           >
@@ -788,133 +818,253 @@ const BugList = () => {
           })()}
         </div>
 
-        {/* Right Column - Search & Logs */}
+        {/* Right Column - Filters & Logs */}
         <div className="right-column">
-          {/* Search & Filter Section */}
-          <div className="bug-sidebar">
-            <div className="sidebar-header">
-              <h3>🔍 Search & Filter</h3>
-              {loading && <div className="search-indicator">⚡ Searching...</div>}
-            </div>
-            
-            <div className="filter-section">
-              <div className="filter-group">
-                <div className="search-input-group">
-                  <input
-                    type="text"
-                    placeholder="Search bugs..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && performSearch()}
-                    className="search-input"
-                    title="Search in title, Chinese text, description, notes, and system information"
-                  />
-                  <button 
-                    onClick={performSearch}
-                    className="search-button"
-                    disabled={loading}
-                    title="Click to search"
-                  >
-                    🔍
-                  </button>
-                </div>
-              </div>
+          {/* Filter Section */}
+          <Box className="filter-section" sx={{
+            backgroundColor: 'white',
+            border: '1px solid #e5e7eb',
+            borderRadius: '12px',
+            padding: '20px',
+            marginBottom: '20px',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+          }}>
+            <Typography variant="h6" sx={{
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '16px',
+              fontWeight: 600,
+              color: '#374151'
+            }}>
+              <FilterListIcon sx={{ color: '#6b7280' }} />
+              Filter
+            </Typography>
 
-              <div className="filter-group">
-                <label>Tester</label>
-                <select value={selectedTester} onChange={(e) => setSelectedTester(e.target.value)}>
-                  <option value="">All Testers</option>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <TextField
+                size="small"
+                placeholder="Enter keywords..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && performSearch()}
+                variant="outlined"
+                fullWidth
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                  },
+                  '& .MuiOutlinedInput-input::placeholder': {
+                    color: '#9ca3af',
+                    fontSize: '14px',
+                    fontWeight: 400,
+                    opacity: 1,
+                  }
+                }}
+              />
+
+              <FormControl size="small" fullWidth>
+                <InputLabel sx={{ fontSize: '14px', color: '#9ca3af' }}>Tester</InputLabel>
+                <Select
+                  value={selectedTester}
+                  onChange={(e) => setSelectedTester(e.target.value)}
+                  label="Tester"
+                  sx={{
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    '& .MuiSelect-select': {
+                      fontSize: '14px',
+                      color: selectedTester ? '#111827' : '#9ca3af',
+                    }
+                  }}
+                >
+                  <MenuItem value="" sx={{ fontSize: '14px', color: '#9ca3af', fontStyle: 'italic' }}>
+                    Select a tester
+                  </MenuItem>
                   {getUniqueTesters().map(tester => (
-                    <option key={tester} value={tester}>{tester}</option>
+                    <MenuItem key={tester} value={tester} sx={{ fontSize: '14px' }}>{tester}</MenuItem>
                   ))}
-                </select>
-              </div>
+                </Select>
+              </FormControl>
 
-              <div className="filter-group">
-                <label>Status</label>
-                <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
-                  <option value="">All Status</option>
+              <FormControl size="small" fullWidth>
+                <InputLabel sx={{ fontSize: '14px', color: '#9ca3af' }}>Status</InputLabel>
+                <Select
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                  label="Status"
+                  sx={{
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    '& .MuiSelect-select': {
+                      fontSize: '14px',
+                      color: selectedStatus ? '#111827' : '#9ca3af',
+                    }
+                  }}
+                >
+                  <MenuItem value="" sx={{ fontSize: '14px', color: '#9ca3af', fontStyle: 'italic' }}>
+                    Select a status
+                  </MenuItem>
                   {getUniqueStatuses().map(status => (
-                    <option key={status} value={status}>{status}</option>
+                    <MenuItem key={status} value={status} sx={{ fontSize: '14px' }}>{status}</MenuItem>
                   ))}
-                </select>
-              </div>
+                </Select>
+              </FormControl>
 
-              <div className="filter-group">
-                <label>PIMS</label>
-                <div className="search-input-group">
-                  <input
-                    type="text"
-                    placeholder="Enter PIMS number..."
-                    value={selectedPims}
-                    onChange={(e) => setSelectedPims(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && performSearch()}
-                    className="filter-input"
-                    title="Enter PIMS number and click search or press Enter"
-                  />
-                  <button 
-                    onClick={performSearch}
-                    className="search-button"
-                    disabled={loading}
-                    title="Click to search"
-                  >
-                    🔍
-                  </button>
-                </div>
-              </div>
-
-              <div className="filter-group">
-                <label>Stage</label>
-                <select value={selectedStage} onChange={(e) => setSelectedStage(e.target.value)}>
-                  <option value="">All Stages</option>
+              <FormControl size="small" fullWidth>
+                <InputLabel sx={{ fontSize: '14px', color: '#9ca3af' }}>Stage</InputLabel>
+                <Select
+                  value={selectedStage}
+                  onChange={(e) => setSelectedStage(e.target.value)}
+                  label="Stage"
+                  sx={{
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    '& .MuiSelect-select': {
+                      fontSize: '14px',
+                      color: selectedStage ? '#111827' : '#9ca3af',
+                    }
+                  }}
+                >
+                  <MenuItem value="" sx={{ fontSize: '14px', color: '#9ca3af', fontStyle: 'italic' }}>
+                    Select a stage
+                  </MenuItem>
                   {getUniqueStages().map(stage => (
-                    <option key={stage} value={stage}>{stage}</option>
+                    <MenuItem key={stage} value={stage} sx={{ fontSize: '14px' }}>{stage}</MenuItem>
                   ))}
-                </select>
-              </div>
+                </Select>
+              </FormControl>
 
-              <div className="filter-group">
-                <label>Date Range</label>
-                <div className="date-range-inline">
-                  <div className="date-input-container">
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="date-input-inline"
-                    />
-                    <span className={`date-placeholder-text ${startDate ? 'hidden' : ''}`}>Start</span>
-                    <span className="date-icon">📅</span>
-                  </div>
-                  <div className="date-input-container">
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="date-input-inline"
-                    />
-                    <span className={`date-placeholder-text ${endDate ? 'hidden' : ''}`}>End</span>
-                    <span className="date-icon">📅</span>
-                  </div>
-                </div>
-              </div>
+              <TextField
+                size="small"
+                placeholder="PIMS"
+                value={selectedPims}
+                onChange={(e) => setSelectedPims(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && performSearch()}
+                variant="outlined"
+                fullWidth
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                  },
+                  '& .MuiOutlinedInput-input::placeholder': {
+                    color: '#9ca3af',
+                    fontSize: '14px',
+                    fontWeight: 400,
+                    opacity: 1,
+                  }
+                }}
+              />
 
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <TextField
+                  label="Start Date"
+                  type="date"
+                  size="small"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  variant="outlined"
+                  InputLabelProps={{
+                    shrink: true,
+                    sx: { fontSize: '14px', color: '#9ca3af' }
+                  }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                    },
+                    '& .MuiOutlinedInput-input': {
+                      fontSize: '14px',
+                      color: '#82a5c5',
+                    }
+                  }}
+                />
+                <TextField
+                  label="End Date"
+                  type="date"
+                  size="small"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  variant="outlined"
+                  InputLabelProps={{
+                    shrink: true,
+                    sx: { fontSize: '14px', color: '#9ca3af' }
+                  }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                    },
+                    '& .MuiOutlinedInput-input': {
+                      fontSize: '14px',
+                      color: '#82a5c5',
+                    }
+                  }}
+                />
+              </Box>
 
-              <div className="filter-actions">
-                <button onClick={clearFilters} className="clear-btn">Clear All Filters</button>
-              </div>
-            </div>
-          </div>
+              <Box sx={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                <Button
+                  onClick={clearFilters}
+                  variant="outlined"
+                  size="small"
+                  sx={{
+                    flex: 1,
+                    borderRadius: '8px',
+                    textTransform: 'none',
+                    fontWeight: 500,
+                    backgroundColor: '#f3f4f6 !important',
+                    backgroundImage: 'none !important',
+                    border: '1px solid #d1d5db',
+                    color: '#374151',
+                    '&:hover': {
+                      backgroundColor: '#e5e7eb !important',
+                      backgroundImage: 'none !important',
+                      border: '1px solid #d1d5db'
+                    }
+                  }}
+                >
+                  Clear
+                </Button>
+                <Button
+                  onClick={performSearch}
+                  variant="contained"
+                  size="small"
+                  sx={{
+                    flex: 1,
+                    borderRadius: '8px',
+                    textTransform: 'none',
+                    fontWeight: 500,
+                    backgroundColor: '#82a5c5 !important',
+                    backgroundImage: 'none !important',
+                    color: 'white',
+                    border: 'none',
+                    boxShadow: 'none',
+                    '&:hover': {
+                      backgroundColor: '#6b8db0 !important',
+                      backgroundImage: 'none !important',
+                      boxShadow: 'none'
+                    }
+                  }}
+                >
+                  Apply
+                </Button>
+              </Box>
+            </Box>
+          </Box>
 
           {/* Operation Logs Section */}
           <div className="operation-logs-independent">
             <div className="logs-header">
-              <button 
-                onClick={handleOpenLogsPage} 
+              <button
+                onClick={handleOpenLogsPage}
                 className="view-logs-btn"
                 title="View all logs with filters"
               >
-                📋 View All Logs
+                View All Logs
               </button>
             </div>
             
@@ -980,6 +1130,7 @@ const BugList = () => {
           onClose={handleCloseLogsPage}
         />
       )}
+
 
       {showConfirmModal && (
         <ConfirmationModal
