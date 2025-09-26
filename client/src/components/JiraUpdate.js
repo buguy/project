@@ -14,6 +14,7 @@ import {
   InputLabel,
   Card,
   CardContent,
+  CardHeader,
   Chip,
   IconButton,
   Collapse,
@@ -938,141 +939,273 @@ const JiraUpdate = () => {
                     borderRadius: '8px',
                     boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
                     border: '1px solid #e5e7eb',
-                    marginBottom: '8px'
+                    marginBottom: '12px'
                   }}>
-                    <CardContent sx={{ padding: '12px' }}>
-                      {/* 8-Column Layout */}
+                    <CardContent sx={{ padding: '16px' }}>
+                      {/* Title Row */}
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                        <Typography variant="h6" sx={{
+                          fontSize: '16px',
+                          fontWeight: 600,
+                          color: '#1f2937',
+                          flex: 1,
+                          marginRight: 2,
+                          lineHeight: 1.4
+                        }}>
+                          {bug.title}
+                        </Typography>
+                        <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                          <Tooltip title="Edit">
+                            <IconButton
+                              onClick={() => handleEditBug(bug)}
+                              size="small"
+                              sx={{
+                                color: '#6b7280',
+                                width: 32,
+                                height: 32,
+                                '&:hover': { backgroundColor: '#f3f4f6', color: '#374151' }
+                              }}
+                            >
+                              <EditIcon sx={{ fontSize: '18px' }} />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Comment">
+                            <IconButton
+                              onClick={() => handleCommentBug(bug)}
+                              size="small"
+                              sx={{
+                                color: '#6b7280',
+                                width: 32,
+                                height: 32,
+                                '&:hover': { backgroundColor: '#f3f4f6', color: '#374151' }
+                              }}
+                            >
+                              <CommentIcon sx={{ fontSize: '18px' }} />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </Box>
+
+                      {/* Row 2: All Data Items (Tester first, then others) */}
                       <Box sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        minHeight: '40px'
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+                        gap: 2,
+                        mb: 2
                       }}>
-                        {/* Column 1: Tester (Label) */}
-                        <Box sx={{ width: '80px', flexShrink: 0 }}>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontSize: '12px',
-                              fontWeight: 500,
-                              color: '#111827',
-                              backgroundColor: '#f9fafb',
-                              padding: '8px 12px',
-                              borderRadius: '4px',
-                              border: '1px solid #d1d5db',
-                              textAlign: 'center',
-                              minHeight: '40px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}
-                          >
+                        {/* Tester - First position */}
+                        <Box sx={{ width: '40px' }}>
+                          <Typography variant="body2" sx={{
+                            fontSize: '13px',
+                            fontWeight: 500,
+                            color: '#374151',
+                            textAlign: 'center'
+                          }}>
                             {bug.tester}
                           </Typography>
                         </Box>
 
-                        {/* Column 2: PIMS (Input Field) */}
-                        <Box sx={{ width: '120px', flexShrink: 0 }}>
+                        {/* PIMS */}
+                        <Box>
                           <TextField
-                            size="small"
-                            value={bug.pims}
                             variant="outlined"
-                            fullWidth
-                            InputProps={{
-                              readOnly: true,
+                            size="small"
+                            value={bug.pims || ''}
+                            onBlur={async (e) => {
+                              // Auto-save on blur (unfocus)
+                              const newValue = e.target.value;
+                              if (newValue !== bug.pims) {
+                                const updatedBug = { ...bug, pims: newValue };
+
+                                // Update local state immediately
+                                setBugs(prevBugs =>
+                                  prevBugs.map(b => b._id === bug._id ? updatedBug : b)
+                                );
+                                setFilteredBugs(prevBugs =>
+                                  prevBugs.map(b => b._id === bug._id ? updatedBug : b)
+                                );
+
+                                // Auto-save to backend
+                                try {
+                                  const token = localStorage.getItem('token');
+                                  await axios.put(`/api/bugs/${bug._id}`, updatedBug, {
+                                    headers: { Authorization: `Bearer ${token}` }
+                                  });
+
+                                  console.log('PIMS updated successfully');
+                                } catch (error) {
+                                  console.error('Failed to update PIMS:', error);
+                                  // Revert local state if save fails
+                                  setBugs(prevBugs =>
+                                    prevBugs.map(b => b._id === bug._id ? bug : b)
+                                  );
+                                  setFilteredBugs(prevBugs =>
+                                    prevBugs.map(b => b._id === bug._id ? bug : b)
+                                  );
+                                }
+                              }
+                            }}
+                            onChange={(e) => {
+                              // Update local state while typing (without saving)
+                              const updatedBug = { ...bug, pims: e.target.value };
+                              setBugs(prevBugs =>
+                                prevBugs.map(b => b._id === bug._id ? updatedBug : b)
+                              );
+                              setFilteredBugs(prevBugs =>
+                                prevBugs.map(b => b._id === bug._id ? updatedBug : b)
+                              );
                             }}
                             sx={{
+                              width: '130px',
                               '& .MuiOutlinedInput-root': {
-                                borderRadius: '4px',
-                                fontSize: '12px',
-                                backgroundColor: '#f0f9ff',
-                                '& input': {
-                                  padding: '8px 12px',
-                                  fontSize: '12px',
-                                  fontWeight: 500,
-                                  color: '#1e40af'
+                                height: '26px',
+                                fontSize: '13px',
+                                fontWeight: 600,
+                                color: '#1e40af',
+                                '& fieldset': {
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '6px'
+                                },
+                                '&:hover fieldset': {
+                                  border: '1px solid #3b82f6'
+                                },
+                                '&.Mui-focused fieldset': {
+                                  border: '2px solid #3b82f6'
                                 }
+                              },
+                              '& .MuiOutlinedInput-input': {
+                                padding: '4px 8px',
+                                fontSize: '13px',
+                                fontWeight: 600,
+                                color: '#1e40af'
                               }
                             }}
                           />
                         </Box>
 
-                        {/* Column 3: Status (Selection) */}
-                        <Box sx={{ width: '120px', flexShrink: 0 }}>
-                          <FormControl size="small" fullWidth>
+                        {/* Status */}
+                        <Box>
+                          <FormControl size="small" sx={{ width: '130px' }}>
                             <Select
                               value={bug.status}
+                              onChange={async (e) => {
+                                // Update the bug status locally and save to backend
+                                const updatedBug = { ...bug, status: e.target.value };
+
+                                // Update local state immediately
+                                setBugs(prevBugs =>
+                                  prevBugs.map(b => b._id === bug._id ? updatedBug : b)
+                                );
+                                setFilteredBugs(prevBugs =>
+                                  prevBugs.map(b => b._id === bug._id ? updatedBug : b)
+                                );
+
+                                // Auto-save to backend
+                                try {
+                                  const token = localStorage.getItem('token');
+                                  await axios.put(`/api/bugs/${bug._id}`, updatedBug, {
+                                    headers: { Authorization: `Bearer ${token}` }
+                                  });
+
+                                  // Optional: Show success feedback
+                                  console.log('Status updated successfully');
+                                } catch (error) {
+                                  console.error('Failed to update status:', error);
+                                  // Optional: Revert local state if save fails
+                                  setBugs(prevBugs =>
+                                    prevBugs.map(b => b._id === bug._id ? bug : b)
+                                  );
+                                  setFilteredBugs(prevBugs =>
+                                    prevBugs.map(b => b._id === bug._id ? bug : b)
+                                  );
+                                }
+                              }}
+                              variant="outlined"
+                              MenuProps={{
+                                anchorOrigin: {
+                                  vertical: 'bottom',
+                                  horizontal: 'left'
+                                },
+                                transformOrigin: {
+                                  vertical: 'top',
+                                  horizontal: 'left'
+                                },
+                                PaperProps: {
+                                  sx: {
+                                    width: '130px !important',
+                                    minWidth: '130px !important',
+                                    maxWidth: '130px !important'
+                                  }
+                                }
+                              }}
                               sx={{
-                                borderRadius: '4px',
+                                height: '26px',
                                 fontSize: '12px',
-                                backgroundColor: bug.status?.toLowerCase() === 'close' ? '#dcfce7' :
-                                               bug.status?.toLowerCase() === 'ready for pims' ? '#fef3c7' :
-                                               bug.status?.toLowerCase() === 'pass' ? '#d1fae5' :
-                                               bug.status?.toLowerCase() === 'fail' ? '#fee2e2' : '#f3f4f6',
-                                color: bug.status?.toLowerCase() === 'close' ? '#166534' :
-                                      bug.status?.toLowerCase() === 'ready for pims' ? '#92400e' :
-                                      bug.status?.toLowerCase() === 'pass' ? '#166534' :
-                                      bug.status?.toLowerCase() === 'fail' ? '#dc2626' : '#374151',
+                                fontWeight: 600,
                                 '& .MuiSelect-select': {
-                                  padding: '8px 12px',
+                                  padding: '4px 12px',
+                                  backgroundColor: bug.status?.toLowerCase() === 'close' ? '#dcfce7' :
+                                                 bug.status?.toLowerCase() === 'ready for pims' ? '#fef3c7' :
+                                                 bug.status?.toLowerCase() === 'ready for test' ? '#fff7ed' :
+                                                 bug.status?.toLowerCase() === 'pass' ? '#d1fae5' :
+                                                 bug.status?.toLowerCase() === 'fail' ? '#fee2e2' : '#f3f4f6',
+                                  color: bug.status?.toLowerCase() === 'close' ? '#166534' :
+                                        bug.status?.toLowerCase() === 'ready for pims' ? '#92400e' :
+                                        bug.status?.toLowerCase() === 'ready for test' ? '#ea580c' :
+                                        bug.status?.toLowerCase() === 'pass' ? '#166534' :
+                                        bug.status?.toLowerCase() === 'fail' ? '#dc2626' : '#374151',
+                                  border: '2px solid transparent',
+                                  borderRadius: '8px',
                                   fontSize: '12px',
-                                  fontWeight: 600
+                                  fontWeight: 600,
+                                  minHeight: '18px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  transition: 'all 0.2s ease',
+                                  cursor: 'pointer',
+                                  '&:hover': {
+                                    borderColor: '#3b82f6',
+                                    boxShadow: '0 2px 8px rgba(59, 130, 246, 0.15)'
+                                  }
+                                },
+                                '& .MuiOutlinedInput-notchedOutline': {
+                                  border: 'none'
+                                },
+                                '& .MuiSelect-icon': {
+                                  fontSize: '16px',
+                                  right: '6px',
+                                  color: '#6b7280',
+                                  transition: 'transform 0.2s ease'
+                                },
+                                '&.Mui-focused .MuiSelect-icon': {
+                                  transform: 'rotate(180deg)'
                                 }
                               }}
                             >
                               {getUniqueStatuses().map(status => (
-                                <MenuItem key={status} value={status} sx={{ fontSize: '12px' }}>{status}</MenuItem>
+                                <MenuItem key={status} value={status} sx={{ fontSize: '11px' }}>
+                                  {status}
+                                </MenuItem>
                               ))}
                             </Select>
                           </FormControl>
                         </Box>
 
-                        {/* Column 4: Title (Content Display) */}
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontSize: '12px',
-                              fontWeight: 500,
-                              color: '#111827',
-                              backgroundColor: '#f9fafb',
-                              padding: '8px 12px',
-                              borderRadius: '4px',
-                              border: '1px solid #d1d5db',
-                              minHeight: '40px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              wordWrap: 'break-word',
-                              whiteSpace: 'normal',
-                              lineHeight: 1.4
-                            }}
-                          >
-                            {bug.title}
-                          </Typography>
-                        </Box>
-
-                        {/* Column 5: TCID (Button) */}
-                        <Box sx={{ width: '100px', flexShrink: 0 }}>
+                        {/* TCID */}
+                        <Box>
                           <Tooltip title={bug.tcid || 'N/A'} arrow placement="top">
                             <Button
-                              variant="outlined"
+                              variant="text"
                               size="small"
-                              fullWidth
                               onClick={(e) => handleFileClick(bug.tcid || 'N/A', e.target)}
                               sx={{
-                                borderRadius: '4px',
-                                textTransform: 'none',
-                                fontSize: '12px',
+                                fontSize: '13px',
                                 fontWeight: 500,
-                                padding: '8px 12px',
-                                backgroundColor: '#f9fafb',
-                                borderColor: '#6b7280',
-                                color: '#374151',
-                                minHeight: '40px',
-                                '&:hover': {
-                                  backgroundColor: '#f3f4f6',
-                                  borderColor: '#6b7280'
-                                }
+                                color: '#6366f1',
+                                textTransform: 'none',
+                                padding: '2px 4px',
+                                minWidth: 'auto',
+                                '&:hover': { backgroundColor: '#eef2ff' }
                               }}
                             >
                               TCID
@@ -1080,57 +1213,21 @@ const JiraUpdate = () => {
                           </Tooltip>
                         </Box>
 
-                        {/* Column 6: Severity (Button) */}
-                        <Box sx={{ width: '90px', flexShrink: 0 }}>
-                          <Tooltip title={bug.product_customer_likelihood} arrow placement="top">
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              fullWidth
-                              onClick={(e) => handleFileClick(bug.product_customer_likelihood, e.target)}
-                              sx={{
-                                borderRadius: '4px',
-                                textTransform: 'none',
-                                fontSize: '12px',
-                                fontWeight: 500,
-                                padding: '8px 12px',
-                                backgroundColor: '#fef7ff',
-                                borderColor: '#a855f7',
-                                color: '#7c3aed',
-                                minHeight: '40px',
-                                '&:hover': {
-                                  backgroundColor: '#f3e8ff',
-                                  borderColor: '#a855f7'
-                                }
-                              }}
-                            >
-                              Severity
-                            </Button>
-                          </Tooltip>
-                        </Box>
-
-                        {/* Column 7: Stage (Button) */}
-                        <Box sx={{ width: '100px', flexShrink: 0 }}>
+                        {/* Stage */}
+                        <Box>
                           <Tooltip title={bug.stage} arrow placement="top">
                             <Button
-                              variant="outlined"
+                              variant="text"
                               size="small"
-                              fullWidth
                               onClick={(e) => handleFileClick(bug.stage, e.target)}
                               sx={{
-                                borderRadius: '4px',
-                                textTransform: 'none',
-                                fontSize: '12px',
+                                fontSize: '13px',
                                 fontWeight: 500,
-                                padding: '8px 12px',
-                                backgroundColor: '#f0f9ff',
-                                borderColor: '#0369a1',
-                                color: '#0369a1',
-                                minHeight: '40px',
-                                '&:hover': {
-                                  backgroundColor: '#e0f2fe',
-                                  borderColor: '#0369a1'
-                                }
+                                color: '#0ea5e9',
+                                textTransform: 'none',
+                                padding: '2px 4px',
+                                minWidth: 'auto',
+                                '&:hover': { backgroundColor: '#f0f9ff' }
                               }}
                             >
                               Stage
@@ -1138,135 +1235,98 @@ const JiraUpdate = () => {
                           </Tooltip>
                         </Box>
 
-                        {/* Column 8: Details (Buttons) */}
-                        <Box sx={{ width: '140px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          {bug.system_information && (
+                        {/* Severity */}
+                        <Box>
+                          <Tooltip title={bug.product_customer_likelihood} arrow placement="top">
+                            <Button
+                              variant="text"
+                              size="small"
+                              onClick={(e) => handleFileClick(bug.product_customer_likelihood, e.target)}
+                              sx={{
+                                fontSize: '13px',
+                                fontWeight: 500,
+                                color: '#a855f7',
+                                textTransform: 'none',
+                                padding: '2px 4px',
+                                minWidth: 'auto',
+                                '&:hover': { backgroundColor: '#faf5ff' }
+                              }}
+                            >
+                              Severity
+                            </Button>
+                          </Tooltip>
+                        </Box>
+
+                        {/* System Info */}
+                        {bug.system_information && (
+                          <Box>
                             <Tooltip title={bug.system_information} arrow placement="top">
                               <Button
-                                variant="outlined"
+                                variant="text"
                                 size="small"
-                                fullWidth
                                 onClick={(e) => handleFileClick(bug.system_information, e.target)}
                                 sx={{
-                                  borderRadius: '4px',
-                                  textTransform: 'none',
-                                  fontSize: '10px',
+                                  fontSize: '13px',
                                   fontWeight: 500,
-                                  padding: '4px 8px',
-                                  backgroundColor: '#f8fafc',
-                                  borderColor: '#64748b',
                                   color: '#64748b',
-                                  minHeight: '24px',
-                                  '&:hover': {
-                                    backgroundColor: '#f1f5f9',
-                                    borderColor: '#64748b'
-                                  }
+                                  textTransform: 'none',
+                                  padding: '2px 4px',
+                                  minWidth: 'auto',
+                                  '&:hover': { backgroundColor: '#f8fafc' }
                                 }}
                               >
                                 System Info
                               </Button>
                             </Tooltip>
-                          )}
-                          {bug.description && (
+                          </Box>
+                        )}
+
+                        {/* Description */}
+                        {bug.description && (
+                          <Box>
                             <Tooltip title={bug.description} arrow placement="top">
                               <Button
-                                variant="outlined"
+                                variant="text"
                                 size="small"
-                                fullWidth
                                 onClick={(e) => handleFileClick(bug.description, e.target)}
                                 sx={{
-                                  borderRadius: '4px',
-                                  textTransform: 'none',
-                                  fontSize: '10px',
+                                  fontSize: '13px',
                                   fontWeight: 500,
-                                  padding: '4px 8px',
-                                  backgroundColor: '#fff7ed',
-                                  borderColor: '#ea580c',
-                                  color: '#ea580c',
-                                  minHeight: '24px',
-                                  '&:hover': {
-                                    backgroundColor: '#fef3c7',
-                                    borderColor: '#ea580c'
-                                  }
+                                  color: '#92400e',
+                                  textTransform: 'none',
+                                  padding: '2px 4px',
+                                  minWidth: 'auto',
+                                  '&:hover': { backgroundColor: '#fef3c7' }
                                 }}
                               >
                                 Description
                               </Button>
                             </Tooltip>
-                          )}
-                          {getFileButtonsFromLink(bug).map((fileButton, index) => (
-                            <Tooltip key={index} title={`Click to copy: ${fileButton.path}`} arrow placement="top">
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                fullWidth
-                                onClick={(e) => handleFileClick(fileButton.path, e.target)}
-                                sx={{
-                                  borderRadius: '4px',
-                                  textTransform: 'none',
-                                  fontSize: '10px',
-                                  fontWeight: 500,
-                                  padding: '4px 8px',
-                                  backgroundColor: fileButton.isViewable ? '#dcfce7' : '#dbeafe',
-                                  borderColor: fileButton.isViewable ? '#10b981' : '#3b82f6',
-                                  color: fileButton.isViewable ? '#065f46' : '#1e40af',
-                                  minHeight: '24px',
-                                  '&:hover': {
-                                    backgroundColor: fileButton.isViewable ? '#10b981' : '#3b82f6',
-                                    color: 'white',
-                                    borderColor: fileButton.isViewable ? '#10b981' : '#3b82f6'
-                                  }
-                                }}
-                              >
-                                {fileButton.extension.toUpperCase()}
-                              </Button>
-                            </Tooltip>
-                          ))}
-                        </Box>
+                          </Box>
+                        )}
+                      </Box>
 
-                        {/* Actions - Moved to the far right */}
-                        <Box sx={{ width: '72px', flexShrink: 0, display: 'flex', gap: '4px', justifyContent: 'flex-end', marginLeft: 'auto' }}>
-                          <Tooltip title="Edit" arrow placement="top">
-                            <IconButton
-                              onClick={() => handleEditBug(bug)}
-                              size="small"
-                              sx={{
-                                padding: '4px',
-                                color: '#7c9cbf',
-                                border: '1px solid #e5e7eb',
-                                borderRadius: '4px',
-                                width: '32px',
-                                height: '32px',
-                                '&:hover': {
-                                  border: '1px solid #7c9cbf',
-                                  color: '#5a7ca3'
-                                }
-                              }}
-                            >
-                              <EditIcon sx={{ fontSize: '16px' }} />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Comment" arrow placement="top">
-                            <IconButton
-                              onClick={() => handleCommentBug(bug)}
-                              size="small"
-                              sx={{
-                                padding: '4px',
-                                color: '#10b981',
-                                border: '1px solid #e5e7eb',
-                                borderRadius: '4px',
-                                width: '32px',
-                                height: '32px',
-                                '&:hover': {
-                                  border: '1px solid #10b981',
-                                  color: '#047857'
-                                }
-                              }}
-                            >
-                              <CommentIcon sx={{ fontSize: '16px' }} />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
+                      {/* Row 3: File Links */}
+                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        {getFileButtonsFromLink(bug).map((fileButton, index) => (
+                          <Chip
+                            key={index}
+                            label={fileButton.extension.toUpperCase()}
+                            size="small"
+                            clickable
+                            onClick={(e) => handleFileClick(fileButton.path, e.target)}
+                            sx={{
+                              backgroundColor: fileButton.isViewable ? '#dcfce7' : '#dbeafe',
+                              color: fileButton.isViewable ? '#065f46' : '#1e40af',
+                              fontSize: '10px',
+                              height: '20px',
+                              fontWeight: 600,
+                              '&:hover': {
+                                backgroundColor: fileButton.isViewable ? '#bbf7d0' : '#bfdbfe'
+                              }
+                            }}
+                          />
+                        ))}
                       </Box>
                     </CardContent>
                   </Card>
