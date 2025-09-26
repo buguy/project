@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Quick Start
 - `start.bat` - Windows batch file to start both backend and frontend servers simultaneously
 
-### Backend Development  
+### Backend Development
 - `npm run dev` - Start backend server with nodemon (auto-restart on changes)
 - `npm start` - Start backend server in production mode
 - `npm run client` - Start frontend React server from root directory
@@ -30,51 +30,61 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This is a full-stack bug tracking application with the following structure:
 
 ### Backend (Express.js + MongoDB)
-- **server.js**: Main Express server with all API routes
-- **Database**: MongoDB with two collections:
-  - `users` collection for authentication (username, hashed password)
-  - `bugs` collection for bug records with comprehensive fields (status, TCID, PIMS, tester, etc.)
-- **Authentication**: JWT-based auth with bcrypt password hashing
-- **API Endpoints**:
-  - `/api/signup`, `/api/login` - Authentication
-  - `/api/bugs` - CRUD operations for bug records (all require authentication)
+- **server.js**: Monolithic Express server containing all API routes, middleware, and business logic
+- **Models** (`/models/`):
+  - `User.js` - Mongoose schema for authentication
+  - `Bug.js` - Comprehensive bug record schema with validation
+  - `OperationLog.js` - Audit logging for all operations
+- **Database**: MongoDB primary with Mongoose ODM
+- **Authentication**: JWT-based with bcrypt password hashing, 24-hour token expiration
+- **Features**:
+  - Operation logging with automatic cleanup (10MB limit)
+  - Google Sheets integration for data import
+  - Advanced date parsing for multiple formats
+  - CORS configuration for cross-origin requests
 
-### Frontend (React)
-- **client/src/App.js**: Main React app with routing and authentication state
-- **Components**:
-  - `Login.js`, `Signup.js` - Authentication forms
-  - `BugList.js` - Main bug management interface with table display
-  - `BugModal.js` - Form for creating/editing bug records
-  - `Navbar.js` - Navigation with logout functionality
-- **Routing**: React Router with protected routes requiring authentication
-- **State Management**: Local state with localStorage for token persistence
+### Frontend (React 19 + React Router)
+- **client/src/App.js**: Main app with authentication state and protected routing
+- **Core Components** (`/components/`):
+  - Authentication: `Login.js`, `Signup.js` with form validation
+  - Main Interface: `BugList.js` - table with filtering, sorting, pagination
+  - Forms: `BugModal.js` - create/edit modal with comprehensive field validation
+  - Navigation: `Navbar.js` with user session management
+  - Logs: `LogsPage.js` - operation audit trail viewing
+- **UI Components** (`/components/ui/`):
+  - Reusable: `Button.js`, `Input.js`, `Loading.js`
+  - Advanced: `FilterModal.js`, `MultiSelect.js`, `SearchInput.js`
+- **Custom Hooks** (`/hooks/`):
+  - `useApi.js` - HTTP client with authentication
+  - `useBugs.js` - Bug data management and operations
+  - `useForm.js` - Form state and validation
+  - `useAI.js` - AI feature integration
 
-### Key Features
-- JWT token-based authentication with 24-hour expiration
-- Complete CRUD operations for bug records
-- Responsive table interface for bug display
-- Modal forms for bug creation/editing
-- All bug record fields from specification including Chinese text support
-
-### Development Setup
-1. Backend runs on port 5000 (configurable via PORT env var)
-2. Frontend runs on port 3000 with proxy to backend at http://localhost:3001
-3. MongoDB connection required (local or cloud instance) - primary database
-4. Environment variables in `.env`: JWT_SECRET, PORT, NODE_ENV, MONGODB_URI (see .env.example)
-5. SQLite database.sqlite file also present for alternative data storage
-6. Sample data available in data.json for testing
-
-### Database Configuration
-The application supports dual database setup:
-- **Primary**: MongoDB with Mongoose ODM (configured via MONGODB_URI in .env)
-- **Alternative**: SQLite file-based database (database.sqlite)
-- Models defined in `/models/` directory with Mongoose schemas
+### Key Architectural Patterns
+- **Monolithic Backend**: All routes and logic in single server.js file
+- **Component Composition**: Reusable UI components with consistent styling
+- **Custom Hooks**: Business logic abstraction and state management
+- **Protected Routes**: Authentication-based navigation with token persistence
+- **Proxy Setup**: Frontend proxies API requests to backend (client proxy: http://localhost:5000)
 
 ### Database Schema
-Bug records (MongoDB collections / SQLite tables):
-- **users**: username (unique), password (hashed), timestamps
-- **bugs**: status, tcid, pims, tester, date, stage, product_customer_likelihood, test_case_name, chinese, title, system_information, description, plus timestamps
+**users** collection:
+- username (unique), password (bcrypt hashed), timestamps
 
-Key field requirements:
+**bugs** collection:
 - Required: status, tcid, tester, date, stage, product_customer_likelihood, test_case_name, title
-- Optional: pims, chinese, system_information, description
+- Optional: pims, chinese, system_information, description, link, notes, meetings
+- Validation on required fields with custom error messages
+- Timestamps for created/updated tracking
+
+**operationlogs** collection:
+- Comprehensive audit trail: user, operation, target, details, IP, user agent
+- Automatic cleanup when collection exceeds 10MB
+
+### Development Setup
+1. Backend runs on port 5000 (default, configurable via PORT env var)
+2. Frontend runs on port 3000 with proxy to http://localhost:5000
+3. MongoDB connection required via MONGODB_URI in .env
+4. Required environment variables: JWT_SECRET, PORT, NODE_ENV, MONGODB_URI
+5. Optional: Google Sheets integration variables (GOOGLE_PRIVATE_KEY_ID, etc.)
+6. Sample data available in data.json for testing

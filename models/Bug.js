@@ -7,13 +7,7 @@ const bugSchema = new mongoose.Schema({
   },
   tcid: {
     type: String,
-    required: true,
-    validate: {
-      validator: function(v) {
-        return v && v.trim().length > 0;
-      },
-      message: 'TCID cannot be empty'
-    }
+    required: false
   },
   pims: {
     type: String
@@ -75,5 +69,10 @@ const bugSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+bugSchema.index({ tester: 1, status: 1 });
+bugSchema.index({ pims: 1 });
+bugSchema.index({ date: -1 });
+bugSchema.index({ status: 1 });
 
 module.exports = mongoose.model('Bug', bugSchema);

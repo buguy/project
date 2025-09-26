@@ -25,3 +25,29 @@ body {
   font-size: 18px;
   color: #666;
 }
+
+/* Global override for Material-UI IconButton backgrounds */
+.MuiIconButton-root {
+  background-color: transparent !important;
+  background: none !important;
+}
+
+.MuiIconButton-root:hover {
+  background-color: transparent !important;
+  background: none !important;
+}
+
+.MuiIconButton-root:focus {
+  background-color: transparent !important;
+  background: none !important;
+}
+
+.MuiIconButton-root:active {
+  background-color: transparent !important;
+  background: none !important;
+}
+
+.MuiIconButton-root.Mui-focusVisible {
+  background-color: transparent !important;
+  background: none !important;
+}

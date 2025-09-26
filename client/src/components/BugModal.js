@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './BugModal.css';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Typography
+} from '@mui/material';
 
 const BugModal = ({ bug, onSave, onClose }) => {
   const [formData, setFormData] = useState({
@@ -28,6 +36,7 @@ const BugModal = ({ bug, onSave, onClose }) => {
   const [translating, setTranslating] = useState(false);
   const [correcting, setCorrecting] = useState(false);
   const [chineseTranslation, setChineseTranslation] = useState('');
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   // Check if PIMS starts with "PIMS-" to disable fields
   const isPimsLocked = formData.pims && formData.pims.toLowerCase().startsWith('pims-');
@@ -222,6 +231,20 @@ Expectation: `;
         };
 
         await axios.put(`/api/bugs/${bug._id}`, submitData, config);
+
+        // Create updated bug object locally for immediate UI update
+        const updatedBugLocal = {
+          ...bug,
+          notes: updatedNotes
+        };
+
+        // Clear form and reset state
+        setError('');
+        setNewComment('');
+
+        // Pass the updated bug back to parent with comment flag but don't close modal
+        onSave(updatedBugLocal, true, false); // false = don't close modal
+        return;
       } else if (isMeetingMode) {
         // Meeting mode: append new meeting note to existing meetings
         if (!newMeeting.trim()) {
@@ -243,6 +266,20 @@ Expectation: `;
         };
 
         await axios.put(`/api/bugs/${bug._id}`, submitData, config);
+
+        // Create updated bug object locally for immediate UI update
+        const updatedBugLocal = {
+          ...bug,
+          meetings: updatedMeetings
+        };
+
+        // Clear form and reset state
+        setError('');
+        setNewMeeting('');
+
+        // Pass the updated bug back to parent with meeting flag but don't close modal
+        onSave(updatedBugLocal, true, false); // false = don't close modal
+        return;
       } else {
         // Regular edit/create mode
         const combinedLinks = linkFields
@@ -255,14 +292,17 @@ Expectation: `;
           link: combinedLinks
         };
 
+        let savedBug;
         if (bug) {
-          await axios.put(`/api/bugs/${bug._id}`, submitData, config);
+          const response = await axios.put(`/api/bugs/${bug._id}`, submitData, config);
+          savedBug = response.data.bug || { ...bug, ...submitData };
         } else {
-          await axios.post('/api/bugs', submitData, config);
+          const response = await axios.post('/api/bugs', submitData, config);
+          savedBug = response.data.bug || response.data;
         }
-      }
 
-      onSave();
+        onSave(savedBug);
+      }
     } catch (error) {
       console.error('Form submission error:', error);
       setError(error.response?.data?.message || 'Failed to save bug');
@@ -338,79 +378,187 @@ Expectation: `;
     <div className="modal-overlay" onClick={handleOverlayClick}>
       <div className="modal-content">
         <div className="modal-header">
-          <h3>{isCommentMode ? 'Add Comment' : (isMeetingMode ? 'Add Meeting Notes' : (bug ? 'Edit Bug Record' : 'Add New Bug Record'))}</h3>
+          <h3>{isCommentMode ? 'Comments' : (isMeetingMode ? 'Meeting Notes' : (bug ? 'Edit Bug Record' : 'Add New Bug Record'))}</h3>
           <button onClick={onClose} className="close-btn">&times;</button>
         </div>
 
         <form onSubmit={handleSubmit} className="bug-form">
           {isCommentMode ? (
-            <>
-              <div className="comment-mode-info">
-                <div className="bug-info-display">
-                  <h4>{bug.title}</h4>
-                  <div className="bug-meta-display">
-                    <span><strong>TCID:</strong> {bug.tcid}</span>
-                    <span><strong>Status:</strong> {bug.status}</span>
-                    <span><strong>Tester:</strong> {bug.tester}</span>
-                    <span><strong>PIMS:</strong> {bug.pims || 'N/A'}</span>
+            <div className="comments-layout">
+              {/* Bug Context Section */}
+              <div className="bug-context-section">
+                <div className="bug-title-row">
+                  <h4 className="bug-title-compact">{bug.title}</h4>
+                  <div className="bug-id-badge">
+                    {bug.pims || bug.tcid || 'No ID'}
                   </div>
                 </div>
-                
-                {bug.notes && (
-                  <div className="existing-comments">
-                    <label>Existing Comments:</label>
-                    <div className="comments-display">
-                      {bug.notes}
-                    </div>
+                <div className="bug-meta-compact">
+                  <span className="meta-item">
+                    <span className="meta-label">Status:</span>
+                    <span className={`status-badge status-${bug.status.toLowerCase()}`}>
+                      {bug.status}
+                    </span>
+                  </span>
+                  <span className="meta-item">
+                    <span className="meta-label">Tester:</span>
+                    <span className="meta-value">{bug.tester}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Comments History Section */}
+              <div className="comments-history-section">
+                <div className="section-header">
+                  <div className="section-title">
+                    <span className="section-icon">💬</span>
+                    Comment History
                   </div>
-                )}
-                
-                <div className="form-group required">
-                  <label>New Comment</label>
+                  {bug.notes && (
+                    <div className="comments-count">
+                      {bug.notes.split('[').length - 1} comments
+                    </div>
+                  )}
+                </div>
+
+                <div className="comments-history-container">
+                  {bug.notes ? (
+                    <div className="comments-timeline">
+                      {bug.notes.split('\n\n').filter(comment => comment.trim()).map((comment, index) => (
+                        <div key={index} className="comment-item">
+                          <div className="comment-content" style={{ whiteSpace: 'pre-line' }}>
+                            {comment.trim()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="no-comments-placeholder">
+                      <span className="placeholder-icon">📝</span>
+                      <span className="placeholder-text">No comments yet. Add the first comment below.</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Add New Comment Section */}
+              <div className="add-comment-section">
+                <div className="section-header">
+                  <div className="section-title">
+                    <span className="section-icon">✏️</span>
+                    Add New Comment
+                  </div>
+                </div>
+
+                <div className="comment-input-container">
                   <textarea
+                    className="comment-input"
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     rows="4"
-                    placeholder="Enter your comment..."
+                    placeholder="Type your comment here..."
                     required
                   />
+                  <div className="input-helper">
+                    <button
+                      type="submit"
+                      className="add-comment-btn"
+                      disabled={loading || !newComment.trim()}
+                    >
+                      {loading ? 'Adding...' : 'Add'}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </>
+            </div>
           ) : isMeetingMode ? (
-            <>
-              <div className="meeting-mode-info">
-                <div className="bug-info-display">
-                  <h4>{bug.title}</h4>
-                  <div className="bug-meta-display">
-                    <span><strong>TCID:</strong> {bug.tcid}</span>
-                    <span><strong>Status:</strong> {bug.status}</span>
-                    <span><strong>Tester:</strong> {bug.tester}</span>
-                    <span><strong>PIMS:</strong> {bug.pims || 'N/A'}</span>
+            <div className="comments-layout">
+              {/* Bug Context Section */}
+              <div className="bug-context-section">
+                <div className="bug-title-row">
+                  <h4 className="bug-title-compact">{bug.title}</h4>
+                  <div className="bug-id-badge">
+                    {bug.pims || bug.tcid || 'No ID'}
                   </div>
                 </div>
-                
-                {bug.meetings && (
-                  <div className="existing-meetings">
-                    <label>Existing Meeting Notes:</label>
-                    <div className="meetings-display">
-                      {bug.meetings}
-                    </div>
+                <div className="bug-meta-compact">
+                  <span className="meta-item">
+                    <span className="meta-label">Status:</span>
+                    <span className={`status-badge status-${bug.status.toLowerCase()}`}>
+                      {bug.status}
+                    </span>
+                  </span>
+                  <span className="meta-item">
+                    <span className="meta-label">Tester:</span>
+                    <span className="meta-value">{bug.tester}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Meeting History Section */}
+              <div className="comments-history-section">
+                <div className="section-header">
+                  <div className="section-title">
+                    <span className="section-icon">📝</span>
+                    Meeting History
                   </div>
-                )}
-                
-                <div className="form-group required">
-                  <label>New Meeting Notes</label>
+                  {bug.meetings && (
+                    <div className="comments-count">
+                      {bug.meetings.split('[').length - 1} meetings
+                    </div>
+                  )}
+                </div>
+
+                <div className="comments-history-container">
+                  {bug.meetings ? (
+                    <div className="comments-timeline">
+                      {bug.meetings.split('\n\n').filter(meeting => meeting.trim()).map((meeting, index) => (
+                        <div key={index} className="comment-item">
+                          <div className="comment-content" style={{ whiteSpace: 'pre-line' }}>
+                            {meeting.trim()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="no-comments-placeholder">
+                      <span className="placeholder-icon">📋</span>
+                      <span className="placeholder-text">No meeting notes yet. Add the first meeting notes below.</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Add New Meeting Section */}
+              <div className="add-comment-section">
+                <div className="section-header">
+                  <div className="section-title">
+                    <span className="section-icon">✏️</span>
+                    Add New Meeting Notes
+                  </div>
+                </div>
+
+                <div className="comment-input-container">
                   <textarea
+                    className="comment-input"
                     value={newMeeting}
                     onChange={(e) => setNewMeeting(e.target.value)}
                     rows="4"
-                    placeholder="Enter meeting notes..."
+                    placeholder="Type your meeting notes here..."
                     required
                   />
+                  <div className="input-helper">
+                    <button
+                      type="submit"
+                      className="add-comment-btn"
+                      disabled={loading || !newMeeting.trim()}
+                    >
+                      {loading ? 'Adding...' : 'Add'}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </>
+            </div>
           ) : (
             <>
               <div className="form-row">
@@ -647,18 +795,6 @@ Expectation: `;
                 />
               </div>
 
-              {bug && (
-                <div className="form-group">
-                  <label>Meeting Notes</label>
-                  <textarea
-                    name="meetings"
-                    value={formData.meetings}
-                    onChange={handleChange}
-                    rows="3"
-                    placeholder="Add meeting notes..."
-                  />
-                </div>
-              )}
 
             </>
           )}
@@ -666,22 +802,100 @@ Expectation: `;
           {error && <div className="error">{error}</div>}
 
           <div className="form-actions">
-            <button type="button" onClick={onClose} className="cancel-btn">
-              Cancel
-            </button>
-            <button 
-              type="button" 
-              onClick={(e) => {
-                handleSubmit(e);
-              }}
-              disabled={loading} 
-              className="save-btn"
-            >
-              {loading ? 'Saving...' : (isCommentMode ? 'Add Comment' : (isMeetingMode ? 'Add Meeting Notes' : (bug ? 'Update' : 'Create')))}
-            </button>
+            {isCommentMode || isMeetingMode ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const textToCheck = isCommentMode ? newComment.trim() : newMeeting.trim();
+                  if (textToCheck) {
+                    setShowConfirmDialog(true);
+                  } else {
+                    onClose();
+                  }
+                }}
+                className="cancel-btn-center"
+              >
+                Cancel
+              </button>
+            ) : (
+              <>
+                <button type="button" onClick={onClose} className="cancel-btn">
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    handleSubmit(e);
+                  }}
+                  disabled={loading}
+                  className="save-btn"
+                >
+                  {loading ? 'Saving...' : (bug ? 'Update' : 'Create')}
+                </button>
+              </>
+            )}
           </div>
         </form>
       </div>
+
+      {/* Material UI Confirmation Dialog */}
+      <Dialog
+        open={showConfirmDialog}
+        onClose={() => setShowConfirmDialog(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
+          }
+        }}
+      >
+        <DialogTitle sx={{ pb: 1 }}>
+          <Typography variant="h6" component="h4" sx={{ fontWeight: 600, color: '#1e293b' }}>
+            Unsaved Changes
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Typography variant="body1" sx={{ color: '#475569', lineHeight: 1.5 }}>
+            You have unsaved {isCommentMode ? 'comment' : 'meeting notes'}. Are you sure you want to cancel?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button
+            onClick={() => setShowConfirmDialog(false)}
+            variant="outlined"
+            sx={{
+              color: '#64748b',
+              borderColor: '#cbd5e1',
+              '&:hover': {
+                backgroundColor: '#f8fafc',
+                borderColor: '#94a3b8'
+              }
+            }}
+          >
+            Keep Editing
+          </Button>
+          <Button
+            onClick={() => {
+              setShowConfirmDialog(false);
+              onClose();
+            }}
+            variant="contained"
+            color="error"
+            sx={{
+              backgroundColor: '#ef4444',
+              '&:hover': {
+                backgroundColor: '#dc2626',
+                transform: 'translateY(-1px)',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+              }
+            }}
+          >
+            Discard Changes
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 };

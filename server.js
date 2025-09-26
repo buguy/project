@@ -70,22 +70,35 @@ const logOperation = async (user, operation, target, targetTitle, details, req, 
   }
 };
 
-// Helper function to cleanup logs if they exceed 10MB
+// Optimized log cleanup - only run periodically, not on every operation
+let logCleanupCounter = 0;
+const LOG_CLEANUP_INTERVAL = 100; // Run cleanup every 100 operations
+
 const cleanupLogsIfNeeded = async () => {
   try {
-    // Get total size of logs collection (approximate)
-    const stats = await mongoose.connection.db.stats();
-    const logsCollection = await mongoose.connection.db.collection('operationlogs').stats();
-    
-    // If size exceeds 10MB (10 * 1024 * 1024 bytes)
-    if (logsCollection.size > 10 * 1024 * 1024) {
-      // Delete oldest logs, keeping only the latest 1000
-      const logs = await OperationLog.find().sort({ timestamp: -1 }).skip(1000);
-      if (logs.length > 0) {
-        const idsToDelete = logs.map(log => log._id);
-        await OperationLog.deleteMany({ _id: { $in: idsToDelete } });
-        console.log(`Cleaned up ${idsToDelete.length} old operation logs`);
-      }
+    logCleanupCounter++;
+
+    // Only run cleanup every LOG_CLEANUP_INTERVAL operations
+    if (logCleanupCounter % LOG_CLEANUP_INTERVAL !== 0) {
+      return;
+    }
+
+    // Count documents instead of getting collection stats for better performance
+    const totalLogs = await OperationLog.countDocuments();
+
+    // If more than 2000 logs, keep only the latest 1000
+    if (totalLogs > 2000) {
+      const logsToKeep = await OperationLog.find()
+        .sort({ timestamp: -1 })
+        .limit(1000)
+        .select('_id');
+
+      const idsToKeep = logsToKeep.map(log => log._id);
+      const result = await OperationLog.deleteMany({
+        _id: { $nin: idsToKeep }
+      });
+
+      console.log(`Cleaned up ${result.deletedCount} old operation logs`);
     }
   } catch (error) {
     console.error('Error cleaning up logs:', error);
@@ -93,7 +106,7 @@ const cleanupLogsIfNeeded = async () => {
 };
 
 const app = express();
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 5000;
 
 // Configure CORS with specific origins
 const corsOptions = {
@@ -234,8 +247,9 @@ const validateBugInput = (req, res, next) => {
     return res.status(400).json({ message: 'Invalid status: must be a non-empty string with max 100 characters' });
   }
   
-  if (!tcid || typeof tcid !== 'string' || tcid.trim().length === 0) {
-    return res.status(400).json({ message: 'Invalid tcid: must be a non-empty string' });
+  // TCID is optional, but if provided, must be a valid string
+  if (tcid !== undefined && tcid !== null && tcid !== '' && typeof tcid !== 'string') {
+    return res.status(400).json({ message: 'Invalid tcid: must be a string' });
   }
   
   if (!date || typeof date !== 'string') {

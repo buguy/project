@@ -51,6 +51,33 @@
     font-size: 0.75rem;
     padding: 0.25rem 0.5rem;
   }
+
+  /* Header responsive styles */
+  .bug-dashboard-header {
+    padding: 16px 20px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .bug-dashboard-header .MuiTypography-h5 {
+    font-size: 20px !important;
+  }
+
+  .bug-dashboard-header .MuiBox-root:first-child {
+    margin-bottom: 16px !important;
+  }
+
+  .bug-dashboard-header .MuiGrid-container {
+    gap: 8px !important;
+  }
+
+  .bug-dashboard-header .MuiGrid-item {
+    padding: 8px !important;
+  }
+
+  .bug-dashboard-header .MuiButton-root {
+    width: 100% !important;
+    margin-top: 12px !important;
+  }
 }
 
 .bug-list-content {
@@ -75,10 +102,10 @@
 }
 
 .operation-logs-independent .logs-container {
-  height: 1400px;
-  min-height: 1400px;
-  max-height: 1400px;
-  overflow-y: auto;
+  height: 2000px;
+  min-height: 2000px;
+  max-height: 2000px;
+  overflow: hidden;
 }
 
 .bug-sidebar {
@@ -878,6 +905,25 @@
   max-height: none;
   opacity: 1;
   margin-bottom: 0;
+  cursor: default;
+}
+
+/* Override cursor for Material-UI collapsed content */
+.MuiCollapse-root,
+.MuiCollapse-root *,
+.MuiCardContent-root:last-child,
+.MuiCardContent-root:last-child * {
+  cursor: default !important;
+}
+
+/* Ensure action buttons still have pointer cursor */
+.bug-actions,
+.bug-actions *,
+.MuiIconButton-root,
+.MuiIconButton-root *,
+.MuiChip-root[role="button"],
+.MuiChip-root[role="button"] * {
+  cursor: pointer !important;
 }
 
 
@@ -1096,7 +1142,7 @@
 }
 
 .edit-btn {
-  background: linear-gradient(135deg, #7c9cbf 0%, #5a7ca3 100%);
+  background: none;
   color: white;
   border: none;
   padding: 0.5rem 1rem;
@@ -1113,7 +1159,7 @@
 }
 
 .comment-btn {
-  background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+  background: none;
   color: white;
   border: none;
   padding: 0.5rem 1rem;
@@ -1128,7 +1174,7 @@
 }
 
 .copy-btn {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  background: none;
   color: white;
   border: none;
   padding: 0.5rem 1rem;
@@ -1143,7 +1189,7 @@
 }
 
 .meeting-btn {
-  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  background: none;
   color: white;
   border: none;
   padding: 0.5rem 1rem;
@@ -1158,7 +1204,7 @@
 }
 
 .delete-btn {
-  background: linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%);
+  background: none;
   color: #c2185b;
   border: none;
   padding: 0.5rem 1rem;
@@ -1466,6 +1512,44 @@
   line-height: 1.5;
   white-space: pre-wrap;
   word-wrap: break-word;
+}
+
+/* Force override Material-UI IconButton backgrounds */
+.bug-actions .MuiIconButton-root,
+.bug-actions .MuiIconButton-root:hover,
+.bug-actions .MuiIconButton-root:focus,
+.bug-actions .MuiIconButton-root:active,
+.bug-actions .MuiIconButton-root.Mui-focusVisible {
+  background-color: transparent !important;
+  background: none !important;
+}
+
+/* Force right alignment for Product/Customer/Likelihood section */
+@media (min-width: 600px) {
+  .MuiGrid-item:last-child .MuiBox-root {
+    text-align: right !important;
+  }
+
+  .MuiGrid-item:last-child .MuiBox-root * {
+    text-align: right !important;
+  }
+
+  .MuiGrid-item:last-child .MuiTypography-root {
+    text-align: right !important;
+  }
+}
+
+.MuiIconButton-root.MuiIconButton-sizeSmall:hover {
+  background-color: transparent !important;
+  background: none !important;
+}
+
+.MuiCard-root:hover .MuiIconButton-root,
+.MuiCard-root:hover .MuiIconButton-root:hover,
+.MuiCard-root:hover .MuiIconButton-root:focus,
+.MuiCard-root:hover .MuiIconButton-root:active {
+  background-color: transparent !important;
+  background: none !important;
 }
 
 /* Independent Operation Logs Section */

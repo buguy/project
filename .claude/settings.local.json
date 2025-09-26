@@ -10,7 +10,17 @@
       "Bash(wmic process where:*)",
       "Bash(PORT=5001 node server.js)",
       "Bash(node:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "mcp__smithery-ai-puppeteer__puppeteer_click",
+      "mcp__smithery-ai-puppeteer__puppeteer_fill",
+      "mcp__smithery-ai-puppeteer__puppeteer_screenshot",
+      "mcp__smithery-ai-puppeteer__puppeteer_evaluate",
+      "Bash(git add:*)",
+      "Bash(npm start)",
+      "WebFetch(domain:github.com)",
+      "Bash(taskkill:*)",
+      "Bash(rm:*)",
+      "Bash(npm test:*)"
     ],
     "deny": []
   }

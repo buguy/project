@@ -42,7 +42,7 @@ import {
 } from '@mui/icons-material';
 import './BugList.css';
 
-const BugList = ({ onImportTrigger }) => {
+const JiraUpdate = () => {
   const [bugs, setBugs] = useState([]);
   const [filteredBugs, setFilteredBugs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,25 +50,21 @@ const BugList = ({ onImportTrigger }) => {
 
   // Debug logging for navigation issue
   useEffect(() => {
-    console.log('🟢 BugList MOUNTED at:', new Date().toLocaleTimeString());
+    console.log('🟢 JiraUpdate MOUNTED at:', new Date().toLocaleTimeString());
     return () => {
-      console.log('🟢 BugList UNMOUNTED at:', new Date().toLocaleTimeString());
+      console.log('🟢 JiraUpdate UNMOUNTED at:', new Date().toLocaleTimeString());
     };
   }, []);
   const [showModal, setShowModal] = useState(false);
   const [editingBug, setEditingBug] = useState(null);
   const [expandedBugId, setExpandedBugId] = useState(null);
-  
+
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({});
   const [filteredPage, setFilteredPage] = useState(1);
   const itemsPerPage = 15;
-  
-  // Import states
-  const [isImporting, setIsImporting] = useState(false);
-  const [importStatus, setImportStatus] = useState('');
-  
+
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTester, setSelectedTester] = useState('');
@@ -84,7 +80,7 @@ const BugList = ({ onImportTrigger }) => {
   // Operation logs states
   const [operationLogs, setOperationLogs] = useState([]);
   const [showLogsPage, setShowLogsPage] = useState(false);
-  
+
   // Confirmation modal states
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmModalConfig, setConfirmModalConfig] = useState({
@@ -93,7 +89,7 @@ const BugList = ({ onImportTrigger }) => {
     type: 'default',
     onConfirm: null
   });
-  
+
   // Filter options from backend
   const [filterOptions, setFilterOptions] = useState({
     testers: [],
@@ -107,18 +103,17 @@ const BugList = ({ onImportTrigger }) => {
   // Debounce timeout reference
   const debounceTimeout = React.useRef(null);
 
-  // Memoized status counts for better performance
+  // Memoized status counts for better performance - based on all bugs
   const statusCounts = useMemo(() => {
-    if (!currentUser || !bugs.length) return { readyForTest: 0, fail: 0, pass: 0, total: 0 };
+    if (!bugs.length) return { readyForTest: 0, fail: 0, pass: 0, total: 0 };
 
-    const userBugs = bugs.filter(bug => bug.tester === currentUser);
     return {
-      readyForTest: userBugs.filter(bug => bug.status === 'Ready for Test').length,
-      fail: userBugs.filter(bug => bug.status === 'Fail').length,
-      pass: userBugs.filter(bug => bug.status === 'Pass').length,
-      total: userBugs.length
+      readyForTest: bugs.filter(bug => bug.status === 'Ready for Test').length,
+      fail: bugs.filter(bug => bug.status === 'Fail').length,
+      pass: bugs.filter(bug => bug.status === 'Pass').length,
+      total: bugs.length
     };
-  }, [bugs, currentUser]);
+  }, [bugs]);
 
   useEffect(() => {
     fetchBugs(currentPage);
@@ -131,15 +126,6 @@ const BugList = ({ onImportTrigger }) => {
     fetchCurrentUser();
   }, []);
 
-
-
-  // Register import function with parent component
-  useEffect(() => {
-    if (onImportTrigger) {
-      onImportTrigger(handleGoogleSheetImport, isImporting);
-    }
-  }, [onImportTrigger, isImporting]);
-
   const fetchCurrentUser = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -151,7 +137,6 @@ const BugList = ({ onImportTrigger }) => {
       console.error('Error fetching current user:', error);
     }
   };
-
 
   const fetchFilterOptions = async () => {
     try {
@@ -226,7 +211,7 @@ const BugList = ({ onImportTrigger }) => {
   // Manual search function (triggered by button click or Enter key)
   const performSearch = useCallback(() => {
     const hasFilters = searchQuery || selectedTester || selectedStatus || selectedPims || selectedStage || startDate || endDate;
-    
+
     if (hasFilters) {
       fetchBugs(1, true);
     } else {
@@ -255,11 +240,6 @@ const BugList = ({ onImportTrigger }) => {
     setCurrentPage(1);
   }, [selectedTester, selectedStatus, selectedStage, startDate, endDate]);
 
-  const handleAddBug = () => {
-    setEditingBug(null);
-    setShowModal(true);
-  };
-
   const handleEditBug = (bug) => {
     setEditingBug(bug);
     setShowModal(true);
@@ -268,111 +248,6 @@ const BugList = ({ onImportTrigger }) => {
   const handleCommentBug = (bug) => {
     setEditingBug({ ...bug, isCommentMode: true });
     setShowModal(true);
-  };
-
-  const handleMeetingBug = (bug) => {
-    setEditingBug({ ...bug, isMeetingMode: true });
-    setShowModal(true);
-  };
-
-  const handleCopyBug = async (bug) => {
-    setConfirmModalConfig({
-      title: 'Copy Bug',
-      message: `Are you sure you want to copy the bug: "${bug.title}"?\n\nThis will create a duplicate with updated tester and date.`,
-      type: 'warning',
-      confirmText: 'Copy Bug',
-      onConfirm: () => performCopyBug(bug)
-    });
-    setShowConfirmModal(true);
-  };
-
-  const performCopyBug = async (bug) => {
-    setShowConfirmModal(false);
-    
-    try {
-      const token = localStorage.getItem('token');
-      
-      // Get current user
-      const userResponse = await axios.get('/api/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const currentUser = userResponse.data.username;
-      
-      // Get current date in the same format as the original bug
-      const today = new Date().toISOString().split('T')[0].replace(/-/g, '/');
-      
-      // Create a copy of the bug with updated tester and date
-      const bugCopy = {
-        ...bug,
-        tester: currentUser,
-        date: today,
-        // Remove the _id and timestamps to create a new record
-        _id: undefined,
-        createdAt: undefined,
-        updatedAt: undefined,
-        __v: undefined
-      };
-      
-      // Create the new bug
-      const response = await axios.post('/api/bugs', bugCopy, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      // Log the copy operation with bug data
-      await axios.post('/api/logs', {
-        operation: 'COPY',
-        target: response.data.id,
-        targetTitle: bug.title,
-        details: `Copied bug: ${bug.tcid} - ${bug.title}`,
-        bugData: {
-          pims: bug.pims,
-          tester: currentUser, // Use the current user as tester for the copy
-          date: today,
-          tcid: bug.tcid
-        }
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      // Refresh the bug list to show the new bug at the top
-      // Clear any active filters to ensure the new bug is visible
-      if (hasActiveFilters()) {
-        clearFilters();
-      } else {
-        fetchBugs(1);
-        setCurrentPage(1);
-      }
-      fetchOperationLogs(); // Refresh logs after copy
-    } catch (error) {
-      console.error('Copy bug error:', error);
-      setError('Failed to copy bug');
-    }
-  };
-
-  const handleDeleteBug = async (bug) => {
-    setConfirmModalConfig({
-      title: 'Delete Bug',
-      message: `Are you sure you want to DELETE the bug: "${bug.title}"?\n\nThis action cannot be undone.`,
-      type: 'danger',
-      confirmText: 'Delete Bug',
-      onConfirm: () => performDeleteBug(bug)
-    });
-    setShowConfirmModal(true);
-  };
-
-  const performDeleteBug = async (bug) => {
-    setShowConfirmModal(false);
-    
-    try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`/api/bugs/${bug._id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      fetchBugs();
-      fetchOperationLogs(); // Refresh logs after delete
-    } catch (error) {
-      setError('Failed to delete bug');
-    }
   };
 
   const handleBugSaved = (updatedBug, isCommentOrMeeting = false, shouldCloseModal = true) => {
@@ -456,7 +331,7 @@ const BugList = ({ onImportTrigger }) => {
   const hasActiveFilters = () => {
     return searchQuery || selectedTester || selectedStatus || selectedPims || selectedStage || startDate || endDate;
   };
-  
+
   // Remove duplicates based on PIMS number
   const removeDuplicatesByPims = (bugs) => {
     const seen = new Set();
@@ -485,7 +360,7 @@ const BugList = ({ onImportTrigger }) => {
     const endIndex = startIndex + itemsPerPage;
     return bugsToDisplay.slice(startIndex, endIndex);
   };
-  
+
   // Get pagination info for filtered results
   const getFilteredPaginationInfo = () => {
     const deduplicatedBugs = removeDuplicatesByPims(filteredBugs);
@@ -550,59 +425,6 @@ const BugList = ({ onImportTrigger }) => {
     return pages;
   };
 
-  const handleGoogleSheetImport = async () => {
-    if (isImporting) return;
-    
-    setIsImporting(true);
-    setImportStatus('Connecting to Google Sheets...');
-    
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.post('/api/import-google-sheet', {
-        sheetId: '1Cw-RYG4e060Y8P7jkglqWvq04SRRtufD9WOCcKo-sB4',
-        sheetName: 'CurrentVersion'
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      const result = response.data;
-      const statusMsg = `Import completed! ${result.imported} new bugs imported, ${result.updated || 0} bugs updated, ${result.errors} errors`;
-      setImportStatus(statusMsg);
-      
-      // Refresh the bug list
-      setTimeout(() => {
-        fetchBugs(1);
-        setCurrentPage(1);
-        setImportStatus('');
-      }, 2000);
-      
-    } catch (error) {
-      console.error('Import error:', error);
-      const errorData = error.response?.data;
-      let errorMsg = errorData?.message || 'Import failed';
-      
-      // Add detailed instructions for permission errors
-      if (errorData?.details) {
-        errorMsg = `${errorMsg}\n\n${errorData.details}`;
-      }
-      
-      if (errorData?.sheetUrl) {
-        errorMsg += `\n\nSheet URL: ${errorData.sheetUrl}`;
-      }
-      
-      setImportStatus(`❌ ${errorMsg}`);
-      
-      // Show error longer for permission issues
-      const timeout = errorData?.details ? 15000 : 5000;
-      setTimeout(() => {
-        setImportStatus('');
-      }, timeout);
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
-
   const formatSystemInfo = (info) => {
     if (!info) return '';
     return info
@@ -644,21 +466,20 @@ const BugList = ({ onImportTrigger }) => {
   const getUniqueStatuses = () => filterOptions.statuses;
   const getUniqueStages = () => filterOptions.stages;
 
-  // Get status counts from state or calculate on-demand as fallback
+  // Get status counts from state or calculate on-demand as fallback - based on all bugs
   const getStatusCounts = () => {
     // If we have state-based counts and they're not all zero (or if they should be zero), use them
-    if (statusCounts.total > 0 || (!loading && currentUser && bugs.length === 0)) {
+    if (statusCounts.total > 0 || (!loading && bugs.length === 0)) {
       return statusCounts;
     }
 
     // Fallback: calculate immediately if we have data available
-    if (!loading && currentUser && bugs.length > 0) {
-      const userBugs = bugs.filter(bug => bug.tester === currentUser);
+    if (!loading && bugs.length > 0) {
       return {
-        readyForTest: userBugs.filter(bug => bug.status === 'Ready for Test').length,
-        fail: userBugs.filter(bug => bug.status === 'Fail').length,
-        pass: userBugs.filter(bug => bug.status === 'Pass').length,
-        total: userBugs.length
+        readyForTest: bugs.filter(bug => bug.status === 'Ready for Test').length,
+        fail: bugs.filter(bug => bug.status === 'Fail').length,
+        pass: bugs.filter(bug => bug.status === 'Pass').length,
+        total: bugs.length
       };
     }
 
@@ -716,10 +537,10 @@ const BugList = ({ onImportTrigger }) => {
 
   const getFileButtonsFromLink = (bug) => {
     if (!bug.link || bug.link.trim() === '') return [];
-    
+
     const filePaths = bug.link.split('\n').filter(line => line.trim());
     const buttons = [];
-    
+
     filePaths.forEach((path) => {
       const cleanPath = path.replace(/^"|"$/g, '').trim();
       if (cleanPath) {
@@ -731,7 +552,7 @@ const BugList = ({ onImportTrigger }) => {
         });
       }
     });
-    
+
     return buttons;
   };
 
@@ -759,13 +580,12 @@ const BugList = ({ onImportTrigger }) => {
     setShowLogsPage(false);
   };
 
-
   const showCopiedMessage = (buttonElement) => {
     const originalText = buttonElement.textContent;
     buttonElement.textContent = 'Copied!';
     buttonElement.style.background = 'linear-gradient(135deg, #10b981 0%, #047857 100%)';
     buttonElement.style.color = 'white';
-    
+
     setTimeout(() => {
       buttonElement.textContent = originalText;
       buttonElement.style.background = '';
@@ -778,12 +598,6 @@ const BugList = ({ onImportTrigger }) => {
 
   return (
     <div className="bug-list-container">
-      {importStatus && (
-        <div className={`import-status ${importStatus.includes('Error') ? 'error' : 'success'}`}>
-          {importStatus}
-        </div>
-      )}
-
       <div className="bug-list-content">
         {/* Main Content */}
         <div className="bug-main-content">
@@ -842,10 +656,9 @@ const BugList = ({ onImportTrigger }) => {
                             setFilteredBugs(bugs);
                           } else {
                             setSelectedStatus('Ready for Test');
-                            setSelectedTester(currentUser);
-                            // Filter locally for current user and status
+                            // Filter locally for status
                             const filteredResults = bugs.filter(bug =>
-                              bug.tester === currentUser && bug.status === 'Ready for Test'
+                              bug.status === 'Ready for Test'
                             );
                             setFilteredBugs(filteredResults);
                           }
@@ -914,10 +727,9 @@ const BugList = ({ onImportTrigger }) => {
                             setFilteredBugs(bugs);
                           } else {
                             setSelectedStatus('Fail');
-                            setSelectedTester(currentUser);
-                            // Filter locally for current user and status
+                            // Filter locally for status
                             const filteredResults = bugs.filter(bug =>
-                              bug.tester === currentUser && bug.status === 'Fail'
+                              bug.status === 'Fail'
                             );
                             setFilteredBugs(filteredResults);
                           }
@@ -986,10 +798,9 @@ const BugList = ({ onImportTrigger }) => {
                             setFilteredBugs(bugs);
                           } else {
                             setSelectedStatus('Pass');
-                            setSelectedTester(currentUser);
-                            // Filter locally for current user and status
+                            // Filter locally for status
                             const filteredResults = bugs.filter(bug =>
-                              bug.tester === currentUser && bug.status === 'Pass'
+                              bug.status === 'Pass'
                             );
                             setFilteredBugs(filteredResults);
                           }
@@ -1051,10 +862,9 @@ const BugList = ({ onImportTrigger }) => {
                         onClick={() => {
                           setIsStatusBarFilter(true); // Set flag to prevent API call
                           setSelectedStatus('');
-                          setSelectedTester(currentUser);
-                          // Show all bugs for current user when clicking Total
-                          const filteredResults = bugs.filter(bug => bug.tester === currentUser);
-                          setFilteredBugs(filteredResults);
+                          setSelectedTester('');
+                          // Show all bugs when clicking Total
+                          setFilteredBugs(bugs);
                         }}
                         sx={{
                           display: 'flex',
@@ -1106,53 +916,7 @@ const BugList = ({ onImportTrigger }) => {
                           padding: 0,
                           marginTop: '1px'
                         }}>
-                          Total
-                        </Typography>
-                      </Box>
-                      <Box
-                        onClick={handleAddBug}
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '4px 8px',
-                          borderRadius: '6px',
-                          background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-                          border: '1px solid #2563eb',
-                          flex: 1,
-                          justifyContent: 'center',
-                          minHeight: '32px',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease',
-                          '&:hover': {
-                            background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)',
-                            transform: 'translateY(-1px)',
-                            boxShadow: '0 4px 8px rgba(59, 130, 246, 0.25)'
-                          },
-                          '&:active': {
-                            transform: 'translateY(0)',
-                            boxShadow: '0 2px 4px rgba(59, 130, 246, 0.15)'
-                          }
-                        }}
-                      >
-                        <AddIcon sx={{
-                          fontSize: '16px',
-                          color: 'white',
-                          verticalAlign: 'middle',
-                          marginTop: '-1px'
-                        }} />
-                        <Typography sx={{
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          color: 'white',
-                          textTransform: 'uppercase',
-                          lineHeight: '16px',
-                          verticalAlign: 'middle',
-                          margin: 0,
-                          padding: 0,
-                          marginTop: '1px'
-                        }}>
-                          Add New Bug
+                          Total for Jira
                         </Typography>
                       </Box>
                     </Box>
@@ -1163,69 +927,84 @@ const BugList = ({ onImportTrigger }) => {
             </Paper>
             {getDisplayedBugs().length === 0 ? (
               <div className="no-data">
-                {bugs.length === 0 ? 
-                  "No bug records found. Click \"Add New Bug\" to create one." :
+                {bugs.length === 0 ?
+                  "No bug records found." :
                   "No bugs match your search criteria. Try adjusting your filters."
                 }
               </div>
             ) : (
               getDisplayedBugs().map((bug) => (
-                  <Card key={bug._id} className="bug-card-hover" sx={{
-                    borderRadius: '12px',
-                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                  <Card key={bug._id} sx={{
+                    borderRadius: '8px',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
                     border: '1px solid #e5e7eb',
-                    transition: 'all 0.2s ease-in-out',
-                    cursor: 'pointer',
-                    '&:hover': {
-                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                      transform: 'translateY(-2px)',
-                      backgroundColor: '#fafafa'
-                    },
-                    '&:hover .bug-actions': {
-                      opacity: 1
-                    },
-                    '&:hover .expand-indicator': {
-                      color: '#374151'
-                    }
+                    marginBottom: '8px'
                   }}>
-                    <CardContent
-                      onClick={(e) => {
-                        // Prevent expansion when clicking on action buttons
-                        if (e.target.closest('.bug-actions') || e.target.closest('button')) {
-                          return;
-                        }
-                        toggleBugExpansion(bug._id);
-                      }}
-                      sx={{ padding: '20px', paddingBottom: '0' }}
-                    >
-                      {/* Header with metadata */}
-                      <Box sx={{ display: 'flex', alignItems: 'flex-start', marginBottom: '16px', width: '100%' }}>
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: '8px' }}>
-                            <Chip
-                              label={bug.tester}
-                              size="small"
+                    <CardContent sx={{ padding: '12px' }}>
+                      {/* 8-Column Layout */}
+                      <Box sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        minHeight: '40px'
+                      }}>
+                        {/* Column 1: Tester (Label) */}
+                        <Box sx={{ width: '80px', flexShrink: 0 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontSize: '12px',
+                              fontWeight: 500,
+                              color: '#111827',
+                              backgroundColor: '#f9fafb',
+                              padding: '8px 12px',
+                              borderRadius: '4px',
+                              border: '1px solid #d1d5db',
+                              textAlign: 'center',
+                              minHeight: '40px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            {bug.tester}
+                          </Typography>
+                        </Box>
+
+                        {/* Column 2: PIMS (Input Field) */}
+                        <Box sx={{ width: '120px', flexShrink: 0 }}>
+                          <TextField
+                            size="small"
+                            value={bug.pims}
+                            variant="outlined"
+                            fullWidth
+                            InputProps={{
+                              readOnly: true,
+                            }}
+                            sx={{
+                              '& .MuiOutlinedInput-root': {
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                backgroundColor: '#f0f9ff',
+                                '& input': {
+                                  padding: '8px 12px',
+                                  fontSize: '12px',
+                                  fontWeight: 500,
+                                  color: '#1e40af'
+                                }
+                              }
+                            }}
+                          />
+                        </Box>
+
+                        {/* Column 3: Status (Selection) */}
+                        <Box sx={{ width: '120px', flexShrink: 0 }}>
+                          <FormControl size="small" fullWidth>
+                            <Select
+                              value={bug.status}
                               sx={{
-                                backgroundColor: '#f3f4f6',
-                                color: '#374151',
-                                fontWeight: 500,
-                                fontSize: '12px'
-                              }}
-                            />
-                            <Chip
-                              label={bug.pims}
-                              size="small"
-                              sx={{
-                                backgroundColor: '#dbeafe',
-                                color: '#1e40af',
-                                fontWeight: 500,
-                                fontSize: '12px'
-                              }}
-                            />
-                            <Chip
-                              label={bug.status}
-                              size="small"
-                              sx={{
+                                borderRadius: '4px',
+                                fontSize: '12px',
                                 backgroundColor: bug.status?.toLowerCase() === 'close' ? '#dcfce7' :
                                                bug.status?.toLowerCase() === 'ready for pims' ? '#fef3c7' :
                                                bug.status?.toLowerCase() === 'pass' ? '#d1fae5' :
@@ -1234,479 +1013,267 @@ const BugList = ({ onImportTrigger }) => {
                                       bug.status?.toLowerCase() === 'ready for pims' ? '#92400e' :
                                       bug.status?.toLowerCase() === 'pass' ? '#166534' :
                                       bug.status?.toLowerCase() === 'fail' ? '#dc2626' : '#374151',
-                                fontWeight: 600,
-                                fontSize: '12px'
+                                '& .MuiSelect-select': {
+                                  padding: '8px 12px',
+                                  fontSize: '12px',
+                                  fontWeight: 600
+                                }
                               }}
-                            />
-                            <Chip
-                              label={`[${bug.stage}]`}
-                              size="small"
-                              sx={{
-                                backgroundColor: '#f0f9ff',
-                                color: '#0369a1',
-                                fontWeight: 500,
-                                fontSize: '12px'
-                              }}
-                            />
-                            <Chip
-                              label={bug.date}
-                              size="small"
-                              sx={{
-                                backgroundColor: '#fafafa',
-                                color: '#525252',
-                                fontWeight: 400,
-                                fontSize: '12px'
-                              }}
-                            />
-                          </Stack>
+                            >
+                              {getUniqueStatuses().map(status => (
+                                <MenuItem key={status} value={status} sx={{ fontSize: '12px' }}>{status}</MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
                         </Box>
 
-                        <Box
-                          className="bug-actions"
-                          sx={{
-                            opacity: 0,
-                            transition: 'opacity 0.2s ease',
-                            marginLeft: '12px',
-                            flexShrink: 0,
-                            width: 'auto',
-                            display: 'flex',
-                            gap: '4px'
-                          }}
-                        >
+                        {/* Column 4: Title (Content Display) */}
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontSize: '12px',
+                              fontWeight: 500,
+                              color: '#111827',
+                              backgroundColor: '#f9fafb',
+                              padding: '8px 12px',
+                              borderRadius: '4px',
+                              border: '1px solid #d1d5db',
+                              minHeight: '40px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              wordWrap: 'break-word',
+                              whiteSpace: 'normal',
+                              lineHeight: 1.4
+                            }}
+                          >
+                            {bug.title}
+                          </Typography>
+                        </Box>
+
+                        {/* Column 5: TCID (Button) */}
+                        <Box sx={{ width: '100px', flexShrink: 0 }}>
+                          <Tooltip title={bug.tcid || 'N/A'} arrow placement="top">
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              fullWidth
+                              onClick={(e) => handleFileClick(bug.tcid || 'N/A', e.target)}
+                              sx={{
+                                borderRadius: '4px',
+                                textTransform: 'none',
+                                fontSize: '12px',
+                                fontWeight: 500,
+                                padding: '8px 12px',
+                                backgroundColor: '#f9fafb',
+                                borderColor: '#6b7280',
+                                color: '#374151',
+                                minHeight: '40px',
+                                '&:hover': {
+                                  backgroundColor: '#f3f4f6',
+                                  borderColor: '#6b7280'
+                                }
+                              }}
+                            >
+                              TCID
+                            </Button>
+                          </Tooltip>
+                        </Box>
+
+                        {/* Column 6: Severity (Button) */}
+                        <Box sx={{ width: '90px', flexShrink: 0 }}>
+                          <Tooltip title={bug.product_customer_likelihood} arrow placement="top">
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              fullWidth
+                              onClick={(e) => handleFileClick(bug.product_customer_likelihood, e.target)}
+                              sx={{
+                                borderRadius: '4px',
+                                textTransform: 'none',
+                                fontSize: '12px',
+                                fontWeight: 500,
+                                padding: '8px 12px',
+                                backgroundColor: '#fef7ff',
+                                borderColor: '#a855f7',
+                                color: '#7c3aed',
+                                minHeight: '40px',
+                                '&:hover': {
+                                  backgroundColor: '#f3e8ff',
+                                  borderColor: '#a855f7'
+                                }
+                              }}
+                            >
+                              Severity
+                            </Button>
+                          </Tooltip>
+                        </Box>
+
+                        {/* Column 7: Stage (Button) */}
+                        <Box sx={{ width: '100px', flexShrink: 0 }}>
+                          <Tooltip title={bug.stage} arrow placement="top">
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              fullWidth
+                              onClick={(e) => handleFileClick(bug.stage, e.target)}
+                              sx={{
+                                borderRadius: '4px',
+                                textTransform: 'none',
+                                fontSize: '12px',
+                                fontWeight: 500,
+                                padding: '8px 12px',
+                                backgroundColor: '#f0f9ff',
+                                borderColor: '#0369a1',
+                                color: '#0369a1',
+                                minHeight: '40px',
+                                '&:hover': {
+                                  backgroundColor: '#e0f2fe',
+                                  borderColor: '#0369a1'
+                                }
+                              }}
+                            >
+                              Stage
+                            </Button>
+                          </Tooltip>
+                        </Box>
+
+                        {/* Column 8: Details (Buttons) */}
+                        <Box sx={{ width: '140px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {bug.system_information && (
+                            <Tooltip title={bug.system_information} arrow placement="top">
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                fullWidth
+                                onClick={(e) => handleFileClick(bug.system_information, e.target)}
+                                sx={{
+                                  borderRadius: '4px',
+                                  textTransform: 'none',
+                                  fontSize: '10px',
+                                  fontWeight: 500,
+                                  padding: '4px 8px',
+                                  backgroundColor: '#f8fafc',
+                                  borderColor: '#64748b',
+                                  color: '#64748b',
+                                  minHeight: '24px',
+                                  '&:hover': {
+                                    backgroundColor: '#f1f5f9',
+                                    borderColor: '#64748b'
+                                  }
+                                }}
+                              >
+                                System Info
+                              </Button>
+                            </Tooltip>
+                          )}
+                          {bug.description && (
+                            <Tooltip title={bug.description} arrow placement="top">
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                fullWidth
+                                onClick={(e) => handleFileClick(bug.description, e.target)}
+                                sx={{
+                                  borderRadius: '4px',
+                                  textTransform: 'none',
+                                  fontSize: '10px',
+                                  fontWeight: 500,
+                                  padding: '4px 8px',
+                                  backgroundColor: '#fff7ed',
+                                  borderColor: '#ea580c',
+                                  color: '#ea580c',
+                                  minHeight: '24px',
+                                  '&:hover': {
+                                    backgroundColor: '#fef3c7',
+                                    borderColor: '#ea580c'
+                                  }
+                                }}
+                              >
+                                Description
+                              </Button>
+                            </Tooltip>
+                          )}
+                          {getFileButtonsFromLink(bug).map((fileButton, index) => (
+                            <Tooltip key={index} title={`Click to copy: ${fileButton.path}`} arrow placement="top">
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                fullWidth
+                                onClick={(e) => handleFileClick(fileButton.path, e.target)}
+                                sx={{
+                                  borderRadius: '4px',
+                                  textTransform: 'none',
+                                  fontSize: '10px',
+                                  fontWeight: 500,
+                                  padding: '4px 8px',
+                                  backgroundColor: fileButton.isViewable ? '#dcfce7' : '#dbeafe',
+                                  borderColor: fileButton.isViewable ? '#10b981' : '#3b82f6',
+                                  color: fileButton.isViewable ? '#065f46' : '#1e40af',
+                                  minHeight: '24px',
+                                  '&:hover': {
+                                    backgroundColor: fileButton.isViewable ? '#10b981' : '#3b82f6',
+                                    color: 'white',
+                                    borderColor: fileButton.isViewable ? '#10b981' : '#3b82f6'
+                                  }
+                                }}
+                              >
+                                {fileButton.extension.toUpperCase()}
+                              </Button>
+                            </Tooltip>
+                          ))}
+                        </Box>
+
+                        {/* Actions - Moved to the far right */}
+                        <Box sx={{ width: '72px', flexShrink: 0, display: 'flex', gap: '4px', justifyContent: 'flex-end', marginLeft: 'auto' }}>
                           <Tooltip title="Edit" arrow placement="top">
                             <IconButton
                               onClick={() => handleEditBug(bug)}
                               size="small"
-                              disableRipple
                               sx={{
-                                padding: '5px',
+                                padding: '4px',
                                 color: '#7c9cbf',
-                                borderRadius: '6px',
                                 border: '1px solid #e5e7eb',
-                                backgroundColor: 'transparent !important',
-                                background: 'none !important',
-                                transition: 'all 0.2s ease',
-                                minWidth: '32px',
+                                borderRadius: '4px',
                                 width: '32px',
                                 height: '32px',
                                 '&:hover': {
-                                  backgroundColor: 'rgba(0, 0, 0, 0) !important',
-                                  background: 'none !important',
                                   border: '1px solid #7c9cbf',
-                                  color: '#5a7ca3',
-                                  transform: 'translateY(-1px)'
-                                },
-                                '&:focus': {
-                                  backgroundColor: 'rgba(0, 0, 0, 0) !important',
-                                  background: 'none !important'
-                                },
-                                '&:active': {
-                                  backgroundColor: 'rgba(0, 0, 0, 0) !important',
-                                  background: 'none !important'
-                                },
-                                '&.Mui-focusVisible': {
-                                  backgroundColor: 'rgba(0, 0, 0, 0) !important',
-                                  background: 'none !important'
+                                  color: '#5a7ca3'
                                 }
                               }}
                             >
                               <EditIcon sx={{ fontSize: '16px' }} />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Command" arrow placement="top">
+                          <Tooltip title="Comment" arrow placement="top">
                             <IconButton
                               onClick={() => handleCommentBug(bug)}
                               size="small"
-                              disableRipple
                               sx={{
-                                padding: '5px',
+                                padding: '4px',
                                 color: '#10b981',
-                                borderRadius: '6px',
                                 border: '1px solid #e5e7eb',
-                                backgroundColor: 'transparent !important',
-                                transition: 'all 0.2s ease',
-                                minWidth: '32px',
+                                borderRadius: '4px',
                                 width: '32px',
                                 height: '32px',
                                 '&:hover': {
-                                  backgroundColor: 'transparent !important',
                                   border: '1px solid #10b981',
-                                  color: '#047857',
-                                  transform: 'translateY(-1px)'
-                                },
-                                '&:focus': {
-                                  backgroundColor: 'transparent !important'
-                                },
-                                '&:active': {
-                                  backgroundColor: 'transparent !important'
+                                  color: '#047857'
                                 }
                               }}
                             >
                               <CommentIcon sx={{ fontSize: '16px' }} />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Add Meeting Notes" arrow placement="top">
-                            <IconButton
-                              onClick={() => handleMeetingBug(bug)}
-                              size="small"
-                              disableRipple
-                              sx={{
-                                padding: '5px',
-                                color: '#8b5cf6',
-                                borderRadius: '6px',
-                                border: '1px solid #e5e7eb',
-                                backgroundColor: 'transparent !important',
-                                transition: 'all 0.2s ease',
-                                minWidth: '32px',
-                                width: '32px',
-                                height: '32px',
-                                '&:hover': {
-                                  backgroundColor: 'transparent !important',
-                                  border: '1px solid #8b5cf6',
-                                  color: '#7c3aed',
-                                  transform: 'translateY(-1px)'
-                                },
-                                '&:focus': {
-                                  backgroundColor: 'transparent !important'
-                                },
-                                '&:active': {
-                                  backgroundColor: 'transparent !important'
-                                }
-                              }}
-                            >
-                              <MeetingIcon sx={{ fontSize: '16px' }} />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Copy Bug" arrow placement="top">
-                            <IconButton
-                              onClick={() => handleCopyBug(bug)}
-                              size="small"
-                              disableRipple
-                              sx={{
-                                padding: '5px',
-                                color: '#f59e0b',
-                                borderRadius: '6px',
-                                border: '1px solid #e5e7eb',
-                                backgroundColor: 'transparent !important',
-                                transition: 'all 0.2s ease',
-                                minWidth: '32px',
-                                width: '32px',
-                                height: '32px',
-                                '&:hover': {
-                                  backgroundColor: 'transparent !important',
-                                  border: '1px solid #f59e0b',
-                                  color: '#d97706',
-                                  transform: 'translateY(-1px)'
-                                },
-                                '&:focus': {
-                                  backgroundColor: 'transparent !important'
-                                },
-                                '&:active': {
-                                  backgroundColor: 'transparent !important'
-                                }
-                              }}
-                            >
-                              <CopyIcon sx={{ fontSize: '16px' }} />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Delete Bug" arrow placement="top">
-                            <IconButton
-                              onClick={() => handleDeleteBug(bug)}
-                              size="small"
-                              disableRipple
-                              sx={{
-                                padding: '5px',
-                                color: '#ef4444',
-                                borderRadius: '6px',
-                                border: '1px solid #e5e7eb',
-                                backgroundColor: 'transparent !important',
-                                transition: 'all 0.2s ease',
-                                minWidth: '32px',
-                                width: '32px',
-                                height: '32px',
-                                '&:hover': {
-                                  backgroundColor: 'transparent !important',
-                                  border: '1px solid #ef4444',
-                                  color: '#dc2626',
-                                  transform: 'translateY(-1px)'
-                                },
-                                '&:focus': {
-                                  backgroundColor: 'transparent !important'
-                                },
-                                '&:active': {
-                                  backgroundColor: 'transparent !important'
-                                }
-                              }}
-                            >
-                              <DeleteIcon sx={{ fontSize: '16px' }} />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      </Box>
-
-                      {/* Title Section */}
-                      <Box sx={{ marginBottom: '16px' }}>
-                        <Typography
-                          variant="h6"
-                          sx={{
-                            fontSize: '18px',
-                            fontWeight: 600,
-                            color: '#111827',
-                            lineHeight: 1.4,
-                            marginBottom: bug.chinese ? '8px' : '0'
-                          }}
-                        >
-                          {bug.title}
-                        </Typography>
-                        {bug.chinese && (
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              color: '#6b7280',
-                              fontSize: '14px',
-                              fontStyle: 'italic'
-                            }}
-                          >
-                            {bug.chinese}
-                          </Typography>
-                        )}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
-                          <Box
-                            className="expand-indicator"
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              color: '#9ca3af',
-                              transition: 'all 0.2s ease'
-                            }}
-                          >
-                            {isBugExpanded(bug._id) ? <ExpandLessIcon sx={{ fontSize: '18px' }} /> : <ExpandMoreIcon sx={{ fontSize: '18px' }} />}
-                          </Box>
                         </Box>
                       </Box>
                     </CardContent>
-
-
-                    {/* Collapsible Content */}
-                    <Collapse in={isBugExpanded(bug._id)} timeout={300}>
-                      <Divider sx={{ margin: '0 20px', marginBottom: '16px' }} />
-                      <CardContent sx={{ padding: '0 20px 20px 20px' }}>
-                        {/* Combined Bug Information Section */}
-                        <Paper
-                          elevation={0}
-                          sx={{
-                            backgroundColor: '#f8fafc',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '12px',
-                            padding: '20px',
-                            marginBottom: '16px'
-                          }}
-                        >
-                          {/* Bug Details Header */}
-                          <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-                            <Avatar sx={{ backgroundColor: '#3b82f6', width: 32, height: 32, marginRight: '12px' }}>
-                              <BugReportIcon sx={{ fontSize: '18px' }} />
-                            </Avatar>
-                            <Typography variant="h6" sx={{ fontSize: '16px', fontWeight: 600, color: '#1e293b' }}>
-                              Bug Details
-                            </Typography>
-                          </Box>
-
-                          {/* Basic Bug Information */}
-                          <Grid container spacing={3} sx={{ marginBottom: '16px' }}>
-                            <Grid item xs={12} sm={4}>
-                              <Box sx={{
-                                backgroundColor: 'white',
-                                borderRadius: '8px',
-                                padding: '12px',
-                                border: '1px solid #e2e8f0'
-                              }}>
-                                <Typography variant="caption" sx={{
-                                  color: '#64748b',
-                                  fontSize: '11px',
-                                  fontWeight: 600,
-                                  textTransform: 'uppercase',
-                                  letterSpacing: '0.5px',
-                                  display: 'block',
-                                  marginBottom: '4px'
-                                }}>
-                                  TCID
-                                </Typography>
-                                <Typography variant="body2" sx={{
-                                  color: '#1e293b',
-                                  fontSize: '14px',
-                                  fontWeight: 500
-                                }}>
-                                  {bug.tcid || 'N/A'}
-                                </Typography>
-                              </Box>
-                            </Grid> 
-                            <Grid item xs={12} sm={8}>
-                              <Box sx={{
-                                backgroundColor: 'white',
-                                borderRadius: '8px',
-                                padding: '12px',
-                                border: '1px solid #e2e8f0'
-                              }}>
-                                <Typography variant="caption" sx={{
-                                  color: '#64748b',
-                                  fontSize: '11px',
-                                  fontWeight: 600,
-                                  textTransform: 'uppercase',
-                                  letterSpacing: '0.5px',
-                                  display: 'block',
-                                  marginBottom: '4px'
-                                }}>
-                                  Test Case Name
-                                </Typography>
-                                <Typography variant="body2" sx={{
-                                  color: '#1e293b',
-                                  fontSize: '14px',
-                                  fontWeight: 500
-                                }}>
-                                  {bug.test_case_name}
-                                </Typography>
-                              </Box>
-                            </Grid> 
-                            <Grid item xs={12}>
-                              <Box sx={{
-                                backgroundColor: 'white',
-                                borderRadius: '8px',
-                                padding: '12px',
-                                border: '1px solid #e2e8f0'
-                              }}>
-                                <Typography variant="caption" sx={{
-                                  color: '#64748b',
-                                  fontSize: '11px',
-                                  fontWeight: 600,
-                                  textTransform: 'uppercase',
-                                  letterSpacing: '0.5px',
-                                  display: 'block',
-                                  marginBottom: '4px'
-                                }}>
-                                  Product/Customer/Likelihood
-                                </Typography>
-                                <Typography variant="body2" sx={{
-                                  color: '#1e293b',
-                                  fontSize: '14px',
-                                  fontWeight: 500
-                                }}>
-                                  {bug.product_customer_likelihood}
-                                </Typography>
-                              </Box>
-                            </Grid>
-                          </Grid>
-
-                          {/* System Information Section */}
-                          {bug.system_information && (
-                            <Box sx={{ marginBottom: '16px' }}>
-                              <Box
-                                sx={{
-                                  backgroundColor: 'white',
-                                  borderRadius: '8px',
-                                  padding: '12px',
-                                  border: '1px solid #e2e8f0',
-                                  fontSize: '14px',
-                                  lineHeight: 1.6,
-                                  '& .system-label': {
-                                    fontWeight: 700,
-                                    color: '#475569'
-                                  }
-                                }}
-                                dangerouslySetInnerHTML={{
-                                  __html: formatSystemInfo(bug.system_information)
-                                }}
-                              />
-                            </Box>
-                          )}
-
-                          {/* Description Section */}
-                          {bug.description && (
-                            <Box sx={{ marginBottom: '16px' }}>
-                              <Box
-                                sx={{
-                                  backgroundColor: 'white',
-                                  borderRadius: '8px',
-                                  padding: '12px',
-                                  border: '1px solid #e2e8f0',
-                                  fontSize: '14px',
-                                  lineHeight: 1.6,
-                                  '& .description-title': {
-                                    fontWeight: 600,
-                                    color: '#d97706',
-                                    fontSize: '15px'
-                                  }
-                                }}
-                                dangerouslySetInnerHTML={{
-                                  __html: formatDescription(bug.description)
-                                }}
-                              />
-                            </Box>
-                          )}
-                        </Paper>
-
-                        {/* Separate Sections */}
-                        <Stack spacing={2}>
-
-                          {/* Files Section */}
-                          {getFileButtonsFromLink(bug).length > 0 && (
-                            <Paper
-                              elevation={0}
-                              sx={{
-                                backgroundColor: 'white',
-                                border: '1px solid #e2e8f0',
-                                borderRadius: '12px',
-                                padding: '16px'
-                              }}
-                            >
-                              <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-                                <AttachFileIcon sx={{ color: '#059669', marginRight: '8px', fontSize: '20px' }} />
-                                <Typography variant="subtitle2" sx={{
-                                  fontSize: '14px',
-                                  fontWeight: 600,
-                                  color: '#1e293b'
-                                }}>
-                                  Attached Files ({getFileButtonsFromLink(bug).length})
-                                </Typography>
-                              </Box>
-                              <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: '8px' }}>
-                                {getFileButtonsFromLink(bug).map((fileButton, index) => (
-                                  <Tooltip key={index} title={`Click to copy: ${fileButton.path}`} arrow>
-                                    <Chip
-                                      label={fileButton.extension.toUpperCase()}
-                                      size="small"
-                                      onClick={(e) => handleFileClick(fileButton.path, e.target)}
-                                      icon={<AttachFileIcon sx={{ fontSize: '14px !important' }} />}
-                                      sx={{
-                                        backgroundColor: fileButton.isViewable ? '#dcfce7' : '#dbeafe',
-                                        color: fileButton.isViewable ? '#065f46' : '#1e40af',
-                                        fontWeight: 600,
-                                        fontSize: '12px',
-                                        cursor: 'pointer',
-                                        border: `1px solid ${fileButton.isViewable ? '#10b981' : '#3b82f6'}`,
-                                        transition: 'all 0.2s ease',
-                                        '&:hover': {
-                                          backgroundColor: fileButton.isViewable ? '#10b981' : '#3b82f6',
-                                          color: 'white',
-                                          transform: 'translateY(-1px)',
-                                          boxShadow: '0 4px 8px rgba(0, 0, 0, 0.15)'
-                                        }
-                                      }}
-                                    />
-                                  </Tooltip>
-                                ))}
-                              </Stack>
-                            </Paper>
-                          )}
-
-                        </Stack>
-                      </CardContent>
-                    </Collapse>
                   </Card>
               ))
             )}
           </div>
-          
+
           {/* Pagination Controls */}
           {(() => {
             const paginationInfo = getFilteredPaginationInfo();
@@ -1714,19 +1281,19 @@ const BugList = ({ onImportTrigger }) => {
               <div className="pagination-container">
                 <div className="pagination-single-line">
                   <span className="pagination-info-inline">
-                    {hasActiveFilters() ? 
+                    {hasActiveFilters() ?
                       `Showing ${((paginationInfo.currentPage - 1) * itemsPerPage) + 1}-${Math.min(paginationInfo.currentPage * itemsPerPage, paginationInfo.totalItems)} of ${paginationInfo.totalItems} filtered results` :
                       `Showing ${((paginationInfo.currentPage - 1) * itemsPerPage) + 1}-${Math.min(paginationInfo.currentPage * itemsPerPage, paginationInfo.totalItems)} of ${paginationInfo.totalItems}`
                     }
                   </span>
-                  
-                  <span 
-                    onClick={handlePrevPage} 
+
+                  <span
+                    onClick={handlePrevPage}
                     className={`pagination-nav ${!paginationInfo.hasPrevPage ? 'disabled' : ''}`}
                   >
                     ←
                   </span>
-                  
+
                   {getPageNumbers().map((pageNum, index) => (
                     pageNum === '...' ? (
                       <span key={`ellipsis-${index}`} className="pagination-ellipsis">
@@ -1742,14 +1309,14 @@ const BugList = ({ onImportTrigger }) => {
                       </span>
                     )
                   ))}
-                  
-                  <span 
-                    onClick={handleNextPage} 
+
+                  <span
+                    onClick={handleNextPage}
                     className={`pagination-nav ${!paginationInfo.hasNextPage ? 'disabled' : ''}`}
                   >
                     →
                   </span>
-                  
+
                   <span className="pagination-total-inline">
                     Page {paginationInfo.currentPage} of {paginationInfo.totalPages}
                   </span>
@@ -2026,7 +1593,7 @@ const BugList = ({ onImportTrigger }) => {
                 View All Logs
               </button>
             </div>
-            
+
             <div className="logs-container">
               {operationLogs.length === 0 ? (
                 <div className="no-logs">No operation logs available</div>
@@ -2035,25 +1602,25 @@ const BugList = ({ onImportTrigger }) => {
                   {operationLogs.slice(0, 50).map((log, index) => {
                     const action = log.operation;
                     let pims = log.bugData?.pims ? log.bugData.pims : '';
-                    
+
                     // Handle cases where PIMS might already have "PIMS-" prefix
                     if (pims && !pims.startsWith('PIMS-')) {
                       pims = `PIMS-${pims}`;
                     }
-                    
+
                     // If no PIMS, show "Ready For PIMS"
                     const pimsDisplay = pims || 'Ready For PIMS';
-                    
+
                     const tester = log.user;
                     const date = new Date(log.timestamp).toLocaleString('en-US', {
                       year: 'numeric',
-                      month: 'numeric', 
+                      month: 'numeric',
                       day: 'numeric',
                       hour: 'numeric',
                       minute: '2-digit',
                       hour12: true
                     });
-                    
+
                     return (
                       <div key={log._id || index} className="log-item">
                         <div className="log-single-line">
@@ -2090,7 +1657,6 @@ const BugList = ({ onImportTrigger }) => {
         />
       )}
 
-
       {showConfirmModal && (
         <ConfirmationModal
           isOpen={showConfirmModal}
@@ -2106,4 +1672,4 @@ const BugList = ({ onImportTrigger }) => {
   );
 };
 
-export default BugList;
+export default JiraUpdate;

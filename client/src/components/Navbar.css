@@ -21,6 +21,13 @@
   font-weight: 600;
 }
 
+.nav-menu {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.import-btn,
 .logout-btn {
   background: rgba(255, 255, 255, 0.2);
   color: white;
@@ -34,8 +41,57 @@
   width: auto;
 }
 
+.import-btn:hover,
 .logout-btn:hover {
   background: rgba(255, 255, 255, 0.3);
   border-color: rgba(255, 255, 255, 0.5);
   transform: translateY(-1px);
 }
+
+.import-btn:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.6);
+  border-color: rgba(255, 255, 255, 0.2);
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Navigation link styling */
+.nav-link {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  padding: 0.5rem 1rem;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.nav-link:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+  color: white;
+  text-decoration: none;
+}
+
+.nav-link.active {
+  background: rgba(255, 255, 255, 0.4);
+  border-color: rgba(255, 255, 255, 0.6);
+  color: white;
+}
+
+.test-btn {
+  background: #FF6B6B !important;
+  border-color: #FF6B6B !important;
+}
+
+.test-btn:hover {
+  background: #ff5252 !important;
+  border-color: #ff5252 !important;
+}
+
