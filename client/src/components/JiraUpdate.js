@@ -104,6 +104,21 @@ const JiraUpdate = () => {
   // Debounce timeout reference
   const debounceTimeout = React.useRef(null);
 
+  // Remove duplicates based on PIMS number - defined early for use in useMemo
+  const removeDuplicatesByPims = (bugs) => {
+    const seen = new Set();
+    return bugs.filter(bug => {
+      // Create unique key based on PIMS number (case-insensitive)
+      const pimsKey = bug.pims ? bug.pims.toLowerCase().trim() : `no-pims-${bug._id}`;
+
+      if (seen.has(pimsKey)) {
+        return false; // Skip duplicate
+      }
+      seen.add(pimsKey);
+      return true;
+    });
+  };
+
   // Memoized status counts for better performance - based on deduplicated bugs
   const statusCounts = useMemo(() => {
     if (!bugs.length) return { readyForTest: 0, fail: 0, pass: 0, total: 0 };
@@ -334,21 +349,6 @@ const JiraUpdate = () => {
   // Check if any filters are active
   const hasActiveFilters = () => {
     return searchQuery || selectedTester || selectedStatus || selectedPims || selectedStage || startDate || endDate;
-  };
-
-  // Remove duplicates based on PIMS number
-  const removeDuplicatesByPims = (bugs) => {
-    const seen = new Set();
-    return bugs.filter(bug => {
-      // Create unique key based on PIMS number (case-insensitive)
-      const pimsKey = bug.pims ? bug.pims.toLowerCase().trim() : `no-pims-${bug._id}`;
-
-      if (seen.has(pimsKey)) {
-        return false; // Skip duplicate
-      }
-      seen.add(pimsKey);
-      return true;
-    });
   };
 
   // Get bugs for current page when filters are active
