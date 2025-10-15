@@ -104,15 +104,18 @@ const JiraUpdate = () => {
   // Debounce timeout reference
   const debounceTimeout = React.useRef(null);
 
-  // Memoized status counts for better performance - based on all bugs
+  // Memoized status counts for better performance - based on deduplicated bugs
   const statusCounts = useMemo(() => {
     if (!bugs.length) return { readyForTest: 0, fail: 0, pass: 0, total: 0 };
 
+    // Deduplicate bugs by PIMS before calculating counts
+    const deduplicatedBugs = removeDuplicatesByPims(bugs);
+
     return {
-      readyForTest: bugs.filter(bug => bug.status === 'Ready for Test').length,
-      fail: bugs.filter(bug => bug.status === 'Fail').length,
-      pass: bugs.filter(bug => bug.status === 'Pass').length,
-      total: bugs.length
+      readyForTest: deduplicatedBugs.filter(bug => bug.status === 'Ready for Test').length,
+      fail: deduplicatedBugs.filter(bug => bug.status === 'Fail').length,
+      pass: deduplicatedBugs.filter(bug => bug.status === 'Pass').length,
+      total: deduplicatedBugs.length
     };
   }, [bugs]);
 
