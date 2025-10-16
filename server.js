@@ -452,19 +452,19 @@ app.post('/api/bugs', authenticateToken, validateBugInput, async (req, res) => {
     });
 
     await bug.save();
-    
+
     // Log the operation
     await logOperation(
-      req.user.username, 
-      'CREATE', 
-      bug._id.toString(), 
-      title, 
-      `Created bug: ${tcid} - ${title}`, 
+      req.user.username,
+      'CREATE',
+      bug._id.toString(),
+      title,
+      `Created bug: ${tcid} - ${title}`,
       req,
       { pims, tester, date, tcid }
     );
-    
-    res.status(201).json({ message: 'Bug record created', id: bug._id });
+
+    res.status(201).json({ message: 'Bug record created', id: bug._id, bug: bug });
   } catch (error) {
     console.error('Create bug error:', error);
     res.status(500).json({ message: 'Error creating bug record' });
@@ -800,6 +800,7 @@ app.post('/api/import-google-sheet', authenticateToken, async (req, res) => {
     const batchSize = 100;
     let importedCount = 0;
     let updatedCount = 0;
+    let skippedCount = 0;
     let errorCount = 0;
     
     for (let i = 0; i < bugs.length; i += batchSize) {
@@ -808,10 +809,28 @@ app.post('/api/import-google-sheet', authenticateToken, async (req, res) => {
       try {
         // Filter out records with missing required fields
         const validBugs = batch.filter(bug => {
-          return bug.status && bug.tester && bug.date && bug.test_case_name && bug.title && 
+          const isValid = bug.status && bug.tester && bug.date && bug.test_case_name && bug.title &&
                  bug.tcid && bug.tcid.trim() !== '' &&
                  bug.stage && bug.stage.trim() !== '' &&
                  bug.product_customer_likelihood && bug.product_customer_likelihood.trim() !== '';
+
+          // Log why bugs are rejected
+          if (!isValid) {
+            const missingFields = [];
+            if (!bug.status) missingFields.push('status');
+            if (!bug.tester) missingFields.push('tester');
+            if (!bug.date) missingFields.push('date');
+            if (!bug.test_case_name) missingFields.push('test_case_name');
+            if (!bug.title) missingFields.push('title');
+            if (!bug.tcid || bug.tcid.trim() === '') missingFields.push('tcid');
+            if (!bug.stage || bug.stage.trim() === '') missingFields.push('stage');
+            if (!bug.product_customer_likelihood || bug.product_customer_likelihood.trim() === '') missingFields.push('product_customer_likelihood');
+
+            console.log(`❌ REJECTED - PIMS: ${bug.pims || 'N/A'}, TCID: ${bug.tcid || 'N/A'}, Title: ${bug.title || 'N/A'}`);
+            console.log(`   Missing/empty required fields: ${missingFields.join(', ')}`);
+          }
+
+          return isValid;
         });
         
         // Process each bug individually with upsert
@@ -829,22 +848,30 @@ app.post('/api/import-google-sheet', authenticateToken, async (req, res) => {
             
             const result = await Bug.updateOne(
               uniqueQuery,
-              { 
+              {
                 $set: bug,
-                $setOnInsert: { 
+                $setOnInsert: {
                   _id: new mongoose.Types.ObjectId()
                 }
               },
-              { 
+              {
                 upsert: true,
                 new: true
               }
             );
-            
+
             if (result.upsertedCount > 0) {
               importedCount++;
+              console.log(`✅ Created new bug: ${bug.tcid} - ${bug.title}`);
             } else if (result.modifiedCount > 0) {
               updatedCount++;
+              console.log(`🔄 Updated existing bug: ${bug.tcid} - ${bug.title}`);
+            } else if (result.matchedCount > 0) {
+              // Bug was matched but no fields changed (data identical)
+              skippedCount++;
+              console.log(`⏭️  Skipped (no changes): ${bug.tcid} - ${bug.title}`);
+            } else {
+              console.log(`❓ Unknown result for: ${bug.tcid} - ${bug.title}`, result);
             }
           } catch (bugError) {
             console.error(`Error processing bug:`, bugError.message);
@@ -864,6 +891,7 @@ app.post('/api/import-google-sheet', authenticateToken, async (req, res) => {
       totalRows: dataRows.length,
       imported: importedCount,
       updated: updatedCount,
+      skipped: skippedCount,
       errors: errorCount,
       headers: headers
     });
@@ -902,7 +930,7 @@ app.post('/api/import-google-sheet', authenticateToken, async (req, res) => {
   }
 });
 
-// Translation endpoint using Claude API
+// Translation endpoint using Gemini API
 app.post('/api/translate', authenticateToken, async (req, res) => {
   try {
     const { text } = req.body;
@@ -911,22 +939,24 @@ app.post('/api/translate', authenticateToken, async (req, res) => {
       return res.status(400).json({ message: 'Text to translate is required' });
     }
 
-    const response = await axios.post('https://api.anthropic.com/v1/messages', {
-      model: 'claude-3-haiku-20240307',
-      max_tokens: 200,
-      messages: [{
-        role: 'user',
-        content: `Translate the following Chinese text to English using formal, professional language suitable for technical bug reports. Avoid personal pronouns (I, you, we). Keep the same prefix [] and use objective, technical descriptions. Then on the next line (no blank line) provide the original Traditional Chinese text: ${text}`
-      }]
-    }, {
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': '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',
-        'anthropic-version': '2023-06-01'
+    const GEMINI_API_KEY = 'AIzaSyCJw1El-XzIlAnmvMwyhVkv0Ll0j8xPcdQ';
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        contents: [{
+          parts: [{
+            text: `Translate the following Chinese text to English using formal, professional language suitable for technical bug reports. Avoid personal pronouns (I, you, we). Keep the same prefix [] and use objective, technical descriptions. Then on the next line (no blank line) provide the original Traditional Chinese text: ${text}`
+          }]
+        }]
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
       }
-    });
+    );
 
-    const translation = response.data.content[0].text.trim();
+    const translation = response.data.candidates[0].content.parts[0].text.trim();
 
     res.json({ translation });
   } catch (error) {
@@ -938,6 +968,7 @@ app.post('/api/translate', authenticateToken, async (req, res) => {
   }
 });
 
+// Grammar correction endpoint using Gemini API
 app.post('/api/correct-grammar', authenticateToken, async (req, res) => {
   try {
     const { text } = req.body;
@@ -946,22 +977,24 @@ app.post('/api/correct-grammar', authenticateToken, async (req, res) => {
       return res.status(400).json({ message: 'Text to correct is required' });
     }
 
-    const response = await axios.post('https://api.anthropic.com/v1/messages', {
-      model: 'claude-3-haiku-20240307',
-      max_tokens: 500,
-      messages: [{
-        role: 'user',
-        content: `Fix only obvious spelling and grammar errors in this text. Return the text with identical formatting - same line breaks, same spacing, same structure. Do not add line breaks, do not remove line breaks, do not change any formatting whatsoever. Text to fix:\n\n${text}`
-      }]
-    }, {
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': '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',
-        'anthropic-version': '2023-06-01'
+    const GEMINI_API_KEY = 'AIzaSyCJw1El-XzIlAnmvMwyhVkv0Ll0j8xPcdQ';
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        contents: [{
+          parts: [{
+            text: `Fix only obvious spelling and grammar errors in this text. Return the text with identical formatting - same line breaks, same spacing, same structure. Do not add line breaks, do not remove line breaks, do not change any formatting whatsoever. Text to fix:\n\n${text}`
+          }]
+        }]
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
       }
-    });
+    );
 
-    let correctedText = response.data.content[0].text.trim();
+    let correctedText = response.data.candidates[0].content.parts[0].text.trim();
 
     // Preserve original line break structure
     const originalLines = text.split('\n');
