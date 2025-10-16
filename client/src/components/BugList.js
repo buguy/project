@@ -362,14 +362,30 @@ const BugList = ({ onImportTrigger }) => {
 
   const performDeleteBug = async (bug) => {
     setShowConfirmModal(false);
-    
+
     try {
       const token = localStorage.getItem('token');
       await axios.delete(`/api/bugs/${bug._id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      fetchBugs();
-      fetchOperationLogs(); // Refresh logs after delete
+
+      // Remove bug from local state without refetching from database
+      setBugs(prevBugs => prevBugs.filter(b => b._id !== bug._id));
+      setFilteredBugs(prevBugs => prevBugs.filter(b => b._id !== bug._id));
+
+      // Update pagination counts
+      const newBugs = bugs.filter(b => b._id !== bug._id);
+      const deduplicatedBugs = removeDuplicatesByPims(newBugs);
+      const totalPages = Math.ceil(deduplicatedBugs.length / itemsPerPage);
+      setPagination({
+        totalBugs: deduplicatedBugs.length,
+        totalPages: totalPages,
+        currentPage: currentPage,
+        hasNextPage: currentPage < totalPages,
+        hasPrevPage: currentPage > 1
+      });
+
+      fetchOperationLogs(); // Only refresh logs after delete
     } catch (error) {
       setError('Failed to delete bug');
     }
@@ -400,7 +416,7 @@ const BugList = ({ onImportTrigger }) => {
     }
 
     // For regular edits/creates, update local state if possible
-    if (updatedBug) {
+    if (updatedBug && updatedBug._id) {
       setBugs(prevBugs => {
         const existingBugIndex = prevBugs.findIndex(bug => bug._id === updatedBug._id);
         if (existingBugIndex !== -1) {

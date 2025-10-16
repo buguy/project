@@ -298,9 +298,23 @@ Expectation: `;
           savedBug = response.data.bug || { ...bug, ...submitData };
         } else {
           const response = await axios.post('/api/bugs', submitData, config);
-          savedBug = response.data.bug || response.data;
+          console.log('Create bug response:', response.data);
+
+          // Ensure we have the complete bug object from the server
+          if (response.data.bug && response.data.bug._id) {
+            savedBug = response.data.bug;
+          } else {
+            // Fallback: construct bug object from response and submitted data
+            savedBug = {
+              _id: response.data.id,
+              ...submitData,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+          }
         }
 
+        console.log('Saved bug object:', savedBug);
         onSave(savedBug);
       }
     } catch (error) {
