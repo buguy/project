@@ -42,7 +42,7 @@ import {
 } from '@mui/icons-material';
 import './BugList.css';
 
-const BugList = ({ onImportTrigger }) => {
+const BugList = () => {
   const [bugs, setBugs] = useState([]);
   const [filteredBugs, setFilteredBugs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -64,11 +64,7 @@ const BugList = ({ onImportTrigger }) => {
   const [pagination, setPagination] = useState({});
   const [filteredPage, setFilteredPage] = useState(1);
   const itemsPerPage = 15;
-  
-  // Import states
-  const [isImporting, setIsImporting] = useState(false);
-  const [importStatus, setImportStatus] = useState('');
-  
+
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTester, setSelectedTester] = useState('');
@@ -121,24 +117,27 @@ const BugList = ({ onImportTrigger }) => {
   }, [bugs, currentUser]);
 
   useEffect(() => {
-    fetchBugs(currentPage);
+    // Only fetch bugs if we have a valid token
+    const token = localStorage.getItem('token');
+    if (token) {
+      // Add a small delay on initial mount to ensure backend is ready
+      const timer = setTimeout(() => {
+        fetchBugs(currentPage);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
   }, [currentPage]);
 
   // Fetch filter options and logs on component mount
   useEffect(() => {
-    fetchFilterOptions();
-    fetchOperationLogs();
-    fetchCurrentUser();
-  }, []);
-
-
-
-  // Register import function with parent component
-  useEffect(() => {
-    if (onImportTrigger) {
-      onImportTrigger(handleGoogleSheetImport, isImporting);
+    // Only fetch if we have a valid token
+    const token = localStorage.getItem('token');
+    if (token) {
+      fetchFilterOptions();
+      fetchOperationLogs();
+      fetchCurrentUser();
     }
-  }, [onImportTrigger, isImporting]);
+  }, []);
 
   const fetchCurrentUser = async () => {
     try {
@@ -177,10 +176,18 @@ const BugList = ({ onImportTrigger }) => {
     }
   };
 
-  const fetchBugs = async (page = 1, fetchAll = false) => {
+  const fetchBugs = async (page = 1, fetchAll = false, retryCount = 0) => {
     try {
       setLoading(true);
+      setError(''); // Clear any previous errors
       const token = localStorage.getItem('token');
+
+      // Don't attempt fetch if no token
+      if (!token) {
+        console.warn('No authentication token found');
+        setLoading(false);
+        return;
+      }
 
       // Always fetch all data when we need to deduplicate to ensure consistent pagination
       const params = {
@@ -197,7 +204,8 @@ const BugList = ({ onImportTrigger }) => {
 
       const response = await axios.get('/api/bugs', {
         headers: { Authorization: `Bearer ${token}` },
-        params
+        params,
+        timeout: 10000 // 10 second timeout
       });
       setBugs(response.data.bugs);
       setFilteredBugs(response.data.bugs);
@@ -214,7 +222,23 @@ const BugList = ({ onImportTrigger }) => {
       });
 
     } catch (error) {
-      setError('Failed to fetch bugs');
+      console.error('Error fetching bugs:', error);
+
+      // Retry logic for network errors (backend not ready yet)
+      if (retryCount < 2 && (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK' || !error.response)) {
+        console.log(`Retrying... Attempt ${retryCount + 1} of 2`);
+        setTimeout(() => {
+          fetchBugs(page, fetchAll, retryCount + 1);
+        }, 1000 * (retryCount + 1)); // Exponential backoff: 1s, 2s
+        return;
+      }
+
+      // Only show error if it's not an authentication issue and we've exhausted retries
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        console.warn('Authentication error - token may be invalid');
+      } else {
+        setError('Failed to fetch bugs');
+      }
     } finally {
       // Add minimum loading delay to ensure loading state is visible when switching pages
       setTimeout(() => {
@@ -235,7 +259,7 @@ const BugList = ({ onImportTrigger }) => {
     setCurrentPage(1);
   }, [searchQuery, selectedTester, selectedStatus, selectedPims, selectedStage, startDate, endDate]);
 
-  // Trigger immediate search ONLY for dropdown changes (Tester, Status, Stage, dates)
+  // Trigger immediate search ONLY for dropdown changes (Tester, Status, Stage)
   useEffect(() => {
     if (loading) return;
 
@@ -253,7 +277,7 @@ const BugList = ({ onImportTrigger }) => {
       fetchBugs(1, false);
     }
     setCurrentPage(1);
-  }, [selectedTester, selectedStatus, selectedStage, startDate, endDate]);
+  }, [selectedTester, selectedStatus, selectedStage]);
 
   const handleAddBug = () => {
     setEditingBug(null);
@@ -287,37 +311,41 @@ const BugList = ({ onImportTrigger }) => {
   };
 
   const performCopyBug = async (bug) => {
+    console.log('🔵 performCopyBug called with bug:', bug);
     setShowConfirmModal(false);
-    
+
     try {
       const token = localStorage.getItem('token');
-      
+      console.log('🔵 Token exists:', !!token);
+
       // Get current user
       const userResponse = await axios.get('/api/me', {
         headers: { Authorization: `Bearer ${token}` }
       });
       const currentUser = userResponse.data.username;
-      
+      console.log('🔵 Current user:', currentUser);
+
       // Get current date in the same format as the original bug
       const today = new Date().toISOString().split('T')[0].replace(/-/g, '/');
-      
+      console.log('🔵 Today date:', today);
+
       // Create a copy of the bug with updated tester and date
+      // Only include defined fields to avoid validation issues
+      const { _id, createdAt, updatedAt, __v, ...bugData } = bug;
       const bugCopy = {
-        ...bug,
+        ...bugData,
         tester: currentUser,
-        date: today,
-        // Remove the _id and timestamps to create a new record
-        _id: undefined,
-        createdAt: undefined,
-        updatedAt: undefined,
-        __v: undefined
+        date: today
       };
-      
+      console.log('🔵 Bug copy data:', bugCopy);
+
       // Create the new bug
+      console.log('🔵 Sending POST request to /api/bugs');
       const response = await axios.post('/api/bugs', bugCopy, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
+      console.log('🔵 Bug created successfully:', response.data);
+
       // Log the copy operation with bug data
       await axios.post('/api/logs', {
         operation: 'COPY',
@@ -333,19 +361,31 @@ const BugList = ({ onImportTrigger }) => {
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
-      // Refresh the bug list to show the new bug at the top
+
+      console.log('🔵 Adding new bug to state and refreshing list');
+
+      // Add the newly created bug to the state immediately at the top
+      const newBug = response.data.bug;
+      setBugs(prevBugs => [newBug, ...prevBugs]);
+      setFilteredBugs(prevBugs => [newBug, ...prevBugs]);
+
       // Clear any active filters to ensure the new bug is visible
       if (hasActiveFilters()) {
+        console.log('🔵 Clearing filters to show new bug');
         clearFilters();
       } else {
-        fetchBugs(1);
+        console.log('🔵 Going to page 1 to show new bug');
         setCurrentPage(1);
       }
+
       fetchOperationLogs(); // Refresh logs after copy
+      console.log('🔵 Copy bug complete!');
     } catch (error) {
       console.error('Copy bug error:', error);
-      setError('Failed to copy bug');
+      console.error('Error details:', error.response?.data);
+      const errorMessage = error.response?.data?.message || 'Failed to copy bug';
+      setError(errorMessage);
+      alert(`Failed to copy bug: ${errorMessage}`);
     }
   };
 
@@ -392,6 +432,8 @@ const BugList = ({ onImportTrigger }) => {
   };
 
   const handleBugSaved = (updatedBug, isCommentOrMeeting = false, shouldCloseModal = true) => {
+    console.log('🟣 handleBugSaved called:', { isCommentOrMeeting, shouldCloseModal, notes: updatedBug?.notes?.substring(0, 100) });
+
     if (shouldCloseModal) {
       setShowModal(false);
       setEditingBug(null);
@@ -399,6 +441,7 @@ const BugList = ({ onImportTrigger }) => {
 
     // For comments/meetings, just update local state without any fetching
     if (isCommentOrMeeting && updatedBug) {
+      console.log('🟣 Updating bugs state with new comment');
       setBugs(prevBugs =>
         prevBugs.map(bug => bug._id === updatedBug._id ? updatedBug : bug)
       );
@@ -408,7 +451,8 @@ const BugList = ({ onImportTrigger }) => {
 
       // Update the editing bug state so modal shows the updated data
       if (!shouldCloseModal) {
-        setEditingBug(updatedBug);
+        console.log('🟣 Updating editingBug state');
+        setEditingBug({ ...updatedBug, isCommentMode: editingBug?.isCommentMode, isMeetingMode: editingBug?.isMeetingMode });
       }
 
       // Don't fetch operation logs for comments/meetings to avoid any loading
@@ -473,17 +517,18 @@ const BugList = ({ onImportTrigger }) => {
     return searchQuery || selectedTester || selectedStatus || selectedPims || selectedStage || startDate || endDate;
   };
   
-  // Remove duplicates based on PIMS number
+  // Remove duplicates based on _id (bug database ID) only
+  // This ensures we don't deduplicate bugs with the same PIMS number
   const removeDuplicatesByPims = (bugs) => {
     const seen = new Set();
     return bugs.filter(bug => {
-      // Create unique key based on PIMS number (case-insensitive)
-      const pimsKey = bug.pims ? bug.pims.toLowerCase().trim() : `no-pims-${bug._id}`;
+      // Use _id for uniqueness to allow multiple bugs with same PIMS
+      const uniqueKey = bug._id;
 
-      if (seen.has(pimsKey)) {
-        return false; // Skip duplicate
+      if (seen.has(uniqueKey)) {
+        return false; // Skip duplicate (same _id)
       }
-      seen.add(pimsKey);
+      seen.add(uniqueKey);
       return true;
     });
   };
@@ -565,59 +610,6 @@ const BugList = ({ onImportTrigger }) => {
 
     return pages;
   };
-
-  const handleGoogleSheetImport = async () => {
-    if (isImporting) return;
-    
-    setIsImporting(true);
-    setImportStatus('Connecting to Google Sheets...');
-    
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.post('/api/import-google-sheet', {
-        sheetId: '1Cw-RYG4e060Y8P7jkglqWvq04SRRtufD9WOCcKo-sB4',
-        sheetName: 'CurrentVersion'
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      const result = response.data;
-      const statusMsg = `Import completed! ${result.imported} new bugs imported, ${result.updated || 0} bugs updated, ${result.errors} errors`;
-      setImportStatus(statusMsg);
-      
-      // Refresh the bug list
-      setTimeout(() => {
-        fetchBugs(1);
-        setCurrentPage(1);
-        setImportStatus('');
-      }, 2000);
-      
-    } catch (error) {
-      console.error('Import error:', error);
-      const errorData = error.response?.data;
-      let errorMsg = errorData?.message || 'Import failed';
-      
-      // Add detailed instructions for permission errors
-      if (errorData?.details) {
-        errorMsg = `${errorMsg}\n\n${errorData.details}`;
-      }
-      
-      if (errorData?.sheetUrl) {
-        errorMsg += `\n\nSheet URL: ${errorData.sheetUrl}`;
-      }
-      
-      setImportStatus(`❌ ${errorMsg}`);
-      
-      // Show error longer for permission issues
-      const timeout = errorData?.details ? 15000 : 5000;
-      setTimeout(() => {
-        setImportStatus('');
-      }, timeout);
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
 
   const formatSystemInfo = (info) => {
     if (!info) return '';
@@ -794,12 +786,6 @@ const BugList = ({ onImportTrigger }) => {
 
   return (
     <div className="bug-list-container">
-      {importStatus && (
-        <div className={`import-status ${importStatus.includes('Error') ? 'error' : 'success'}`}>
-          {importStatus}
-        </div>
-      )}
-
       <div className="bug-list-content">
         {/* Main Content */}
         <div className="bug-main-content">
@@ -1255,7 +1241,7 @@ const BugList = ({ onImportTrigger }) => {
                               }}
                             />
                             <Chip
-                              label={`[${bug.stage}]`}
+                              label={bug.stage}
                               size="small"
                               sx={{
                                 backgroundColor: '#f0f9ff',
@@ -1511,7 +1497,7 @@ const BugList = ({ onImportTrigger }) => {
                         <Paper
                           elevation={0}
                           sx={{
-                            backgroundColor: '#f8fafc',
+                            backgroundColor: '#f1f5f9',
                             border: '1px solid #e2e8f0',
                             borderRadius: '12px',
                             padding: '20px',
@@ -1532,7 +1518,7 @@ const BugList = ({ onImportTrigger }) => {
                           <Grid container spacing={3} sx={{ marginBottom: '16px' }}>
                             <Grid item xs={12} sm={4}>
                               <Box sx={{
-                                backgroundColor: 'white',
+                                backgroundColor: '#f1f5f9',
                                 borderRadius: '8px',
                                 padding: '12px',
                                 border: '1px solid #e2e8f0'
@@ -1559,7 +1545,7 @@ const BugList = ({ onImportTrigger }) => {
                             </Grid> 
                             <Grid item xs={12} sm={8}>
                               <Box sx={{
-                                backgroundColor: 'white',
+                                backgroundColor: '#f1f5f9',
                                 borderRadius: '8px',
                                 padding: '12px',
                                 border: '1px solid #e2e8f0'
@@ -1586,7 +1572,7 @@ const BugList = ({ onImportTrigger }) => {
                             </Grid> 
                             <Grid item xs={12}>
                               <Box sx={{
-                                backgroundColor: 'white',
+                                backgroundColor: '#f1f5f9',
                                 borderRadius: '8px',
                                 padding: '12px',
                                 border: '1px solid #e2e8f0'
@@ -1618,7 +1604,7 @@ const BugList = ({ onImportTrigger }) => {
                             <Box sx={{ marginBottom: '16px' }}>
                               <Box
                                 sx={{
-                                  backgroundColor: 'white',
+                                  backgroundColor: '#f1f5f9',
                                   borderRadius: '8px',
                                   padding: '12px',
                                   border: '1px solid #e2e8f0',
@@ -1641,7 +1627,7 @@ const BugList = ({ onImportTrigger }) => {
                             <Box sx={{ marginBottom: '16px' }}>
                               <Box
                                 sx={{
-                                  backgroundColor: 'white',
+                                  backgroundColor: '#f1f5f9',
                                   borderRadius: '8px',
                                   padding: '12px',
                                   border: '1px solid #e2e8f0',
@@ -1669,7 +1655,7 @@ const BugList = ({ onImportTrigger }) => {
                             <Paper
                               elevation={0}
                               sx={{
-                                backgroundColor: 'white',
+                                backgroundColor: '#f1f5f9',
                                 border: '1px solid #e2e8f0',
                                 borderRadius: '12px',
                                 padding: '16px'
@@ -1712,6 +1698,124 @@ const BugList = ({ onImportTrigger }) => {
                                   </Tooltip>
                                 ))}
                               </Stack>
+                            </Paper>
+                          )}
+
+                          {/* Comments Section */}
+                          {bug.notes && (
+                            <Paper
+                              elevation={0}
+                              sx={{
+                                backgroundColor: '#fefce8',
+                                border: '1px solid #fde047',
+                                borderRadius: '12px',
+                                padding: '16px'
+                              }}
+                            >
+                              <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+                                <CommentIcon sx={{ color: '#ca8a04', marginRight: '8px', fontSize: '20px' }} />
+                                <Typography variant="subtitle2" sx={{
+                                  fontSize: '14px',
+                                  fontWeight: 600,
+                                  color: '#1e293b'
+                                }}>
+                                  Comments ({bug.notes.split('[').length - 1})
+                                </Typography>
+                              </Box>
+                              <Box sx={{
+                                backgroundColor: 'white',
+                                borderRadius: '8px',
+                                padding: '12px',
+                                border: '1px solid #fde047'
+                              }}>
+                                {bug.notes.split('\n\n').filter(comment => comment.trim()).map((comment, index) => (
+                                  <Box
+                                    key={index}
+                                    sx={{
+                                      padding: '8px 0',
+                                      borderBottom: index < bug.notes.split('\n\n').filter(c => c.trim()).length - 1 ? '1px solid #fef3c7' : 'none',
+                                      '&:last-child': {
+                                        borderBottom: 'none',
+                                        paddingBottom: 0
+                                      },
+                                      '&:first-of-type': {
+                                        paddingTop: 0
+                                      }
+                                    }}
+                                  >
+                                    <Typography
+                                      variant="body2"
+                                      sx={{
+                                        whiteSpace: 'pre-line',
+                                        color: '#374151',
+                                        fontSize: '13px',
+                                        lineHeight: 1.6
+                                      }}
+                                    >
+                                      {comment.trim()}
+                                    </Typography>
+                                  </Box>
+                                ))}
+                              </Box>
+                            </Paper>
+                          )}
+
+                          {/* Meeting Notes Section */}
+                          {bug.meetings && (
+                            <Paper
+                              elevation={0}
+                              sx={{
+                                backgroundColor: '#f0f9ff',
+                                border: '1px solid #7dd3fc',
+                                borderRadius: '12px',
+                                padding: '16px'
+                              }}
+                            >
+                              <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+                                <MeetingIcon sx={{ color: '#0284c7', marginRight: '8px', fontSize: '20px' }} />
+                                <Typography variant="subtitle2" sx={{
+                                  fontSize: '14px',
+                                  fontWeight: 600,
+                                  color: '#1e293b'
+                                }}>
+                                  Meeting Notes ({bug.meetings.split('[').length - 1})
+                                </Typography>
+                              </Box>
+                              <Box sx={{
+                                backgroundColor: 'white',
+                                borderRadius: '8px',
+                                padding: '12px',
+                                border: '1px solid #7dd3fc'
+                              }}>
+                                {bug.meetings.split('\n\n').filter(meeting => meeting.trim()).map((meeting, index) => (
+                                  <Box
+                                    key={index}
+                                    sx={{
+                                      padding: '8px 0',
+                                      borderBottom: index < bug.meetings.split('\n\n').filter(m => m.trim()).length - 1 ? '1px solid #e0f2fe' : 'none',
+                                      '&:last-child': {
+                                        borderBottom: 'none',
+                                        paddingBottom: 0
+                                      },
+                                      '&:first-of-type': {
+                                        paddingTop: 0
+                                      }
+                                    }}
+                                  >
+                                    <Typography
+                                      variant="body2"
+                                      sx={{
+                                        whiteSpace: 'pre-line',
+                                        color: '#374151',
+                                        fontSize: '13px',
+                                        lineHeight: 1.6
+                                      }}
+                                    >
+                                      {meeting.trim()}
+                                    </Typography>
+                                  </Box>
+                                ))}
+                              </Box>
                             </Paper>
                           )}
 
@@ -2009,19 +2113,24 @@ const BugList = ({ onImportTrigger }) => {
                     flex: 1,
                     borderRadius: '8px',
                     textTransform: 'none',
-                    fontWeight: 500,
+                    fontWeight: 600,
                     padding: '8px 16px',
                     backgroundColor: '#82a5c5 !important',
                     backgroundImage: 'none !important',
                     color: 'white',
-                    border: 'none',
+                    border: '2px solid transparent',
                     boxShadow: '0 2px 8px rgba(130, 165, 197, 0.2)',
                     transition: 'all 0.2s ease',
                     '&:hover': {
-                      backgroundColor: 'transparent !important',
+                      backgroundColor: '#6a8fad !important',
                       backgroundImage: 'none !important',
-                      transform: 'translateY(-1px)',
-                      boxShadow: '0 4px 12px rgba(130, 165, 197, 0.3)'
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 6px 16px rgba(130, 165, 197, 0.4)',
+                      borderColor: '#5a7f9d'
+                    },
+                    '&:active': {
+                      transform: 'translateY(0)',
+                      boxShadow: '0 2px 4px rgba(130, 165, 197, 0.2)'
                     }
                   }}
                 >
