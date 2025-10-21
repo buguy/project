@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const axios = require('axios');
+const archiver = require('archiver');
 require('dotenv').config();
 
 // Validate required environment variables
@@ -120,11 +121,21 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Connect to MongoDB
+// Connect to MongoDB with optimized connection pooling
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/bugtracker';
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
+mongoose.connect(MONGODB_URI, {
+  maxPoolSize: 10,        // Increase pool size for concurrent requests
+  minPoolSize: 2,         // Maintain minimum connections
+  maxIdleTimeMS: 10000,   // Close idle connections after 10s
+  serverSelectionTimeoutMS: 5000, // Fail fast if server unavailable
+  socketTimeoutMS: 45000,  // Socket timeout
+  family: 4                // Use IPv4
+})
+  .then(() => console.log('Connected to MongoDB with optimized connection pool'))
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  });
 
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
@@ -281,18 +292,18 @@ const validateBugInput = (req, res, next) => {
   next();
 };
 
-// Bug routes
+// Bug routes - OPTIMIZED with limited fetch
 app.get('/api/bugs', authenticateToken, async (req, res) => {
   try {
-    // Check if we should fetch all bugs (for filtering)
-    const fetchAll = req.query.all === 'true';
-    
     // Extract search parameters
     const { search, pims, tester, status, stage, startDate, endDate } = req.query;
-    
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 15;
+    const fetchAll = req.query.all === 'true';
+
     // Build search query
     let searchQuery = {};
-    
+
     // Search in title, chinese, description, or notes
     if (search && search.trim()) {
       const searchRegex = new RegExp(search.trim(), 'i');
@@ -304,56 +315,62 @@ app.get('/api/bugs', authenticateToken, async (req, res) => {
         { system_information: searchRegex }
       ];
     }
-    
+
     // PIMS search (partial match)
     if (pims && pims.trim()) {
       searchQuery.pims = new RegExp(pims.trim(), 'i');
     }
-    
+
     // Exact matches for dropdowns
     if (tester && tester.trim()) {
       searchQuery.tester = tester.trim();
     }
-    
+
     if (status && status.trim()) {
       searchQuery.status = status.trim();
     }
-    
+
     if (stage && stage.trim()) {
       searchQuery.stage = stage.trim();
     }
-    
-    // Date range filtering
+
+    // Date range filtering (note: requires dates in consistent format for optimal performance)
     if (startDate || endDate) {
-      // We need to handle mixed date formats, so we'll do this in post-processing
-      // for now, we'll filter all dates and process them after retrieval
+      // For string dates, we'll filter after retrieval
+      // This is a temporary solution - ideally dates should be Date objects in DB
     }
-    
-    // Get total count for pagination info
-    const totalBugs = await Bug.countDocuments(searchQuery);
+
+    // PERFORMANCE OPTIMIZATION: Limit maximum documents fetched
+    const MAX_FETCH_LIMIT = fetchAll ? 2000 : limit * 2; // Fetch only what's needed
+
+    // Use MongoDB sorting and limiting for better performance
+    let bugs = await Bug.find(searchQuery)
+      .sort({ createdAt: -1, _id: -1 }) // Sort by createdAt first (indexed), then _id
+      .limit(MAX_FETCH_LIMIT)
+      .lean(); // Use lean() for better performance (returns plain objects)
+
+    // Filter by date range if provided (after retrieval due to mixed formats)
+    if (startDate || endDate) {
+      bugs = bugs.filter(bug => {
+        const bugDate = parseDate(bug.date);
+        const start = startDate ? new Date(startDate) : null;
+        const end = endDate ? new Date(endDate) : null;
+
+        return (!start || bugDate >= start) && (!end || bugDate <= end);
+      });
+    }
+
+    // Sort by date field (handles mixed date formats)
+    bugs.sort((a, b) => {
+      const dateA = parseDate(a.date);
+      const dateB = parseDate(b.date);
+      return dateB - dateA; // Descending order (latest first)
+    });
+
+    const totalBugs = bugs.length;
 
     if (fetchAll) {
-      // Return all bugs without pagination - sort by date (latest first)
-      let bugs = await Bug.find(searchQuery);
-      
-      // Filter by date range if provided (after retrieval due to mixed formats)
-      if (startDate || endDate) {
-        bugs = bugs.filter(bug => {
-          const bugDate = parseDate(bug.date);
-          const start = startDate ? new Date(startDate) : null;
-          const end = endDate ? new Date(endDate) : null;
-          
-          return (!start || bugDate >= start) && (!end || bugDate <= end);
-        });
-      }
-      
-      // Sort bugs with custom date parsing to handle mixed formats
-      bugs.sort((a, b) => {
-        const dateA = parseDate(a.date);
-        const dateB = parseDate(b.date);
-        return dateB - dateA; // Descending order (latest first)
-      });
-
+      // Return all fetched bugs
       res.json({
         bugs,
         pagination: {
@@ -367,49 +384,20 @@ app.get('/api/bugs', authenticateToken, async (req, res) => {
         }
       });
     } else {
-      // Normal pagination
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 15;
+      // Apply pagination
       const skip = (page - 1) * limit;
+      const paginatedBugs = bugs.slice(skip, skip + limit);
       const totalPages = Math.ceil(totalBugs / limit);
 
-      // Get all bugs for sorting, then paginate
-      let allBugs = await Bug.find(searchQuery);
-      
-      // Filter by date range if provided (after retrieval due to mixed formats)
-      if (startDate || endDate) {
-        allBugs = allBugs.filter(bug => {
-          const bugDate = parseDate(bug.date);
-          const start = startDate ? new Date(startDate) : null;
-          const end = endDate ? new Date(endDate) : null;
-          
-          return (!start || bugDate >= start) && (!end || bugDate <= end);
-        });
-      }
-      
-      // Sort bugs with custom date parsing to handle mixed formats
-      allBugs.sort((a, b) => {
-        const dateA = parseDate(a.date);
-        const dateB = parseDate(b.date);
-        return dateB - dateA; // Descending order (latest first)
-      });
-      
-      // Apply pagination after sorting and filtering
-      const bugs = allBugs.slice(skip, skip + limit);
-      
-      // Recalculate pagination info based on filtered results
-      const filteredTotal = allBugs.length;
-      const filteredTotalPages = Math.ceil(filteredTotal / limit);
-
       res.json({
-        bugs,
+        bugs: paginatedBugs,
         pagination: {
           currentPage: page,
-          totalPages: filteredTotalPages,
-          totalBugs: filteredTotal,
-          hasNextPage: page < filteredTotalPages,
+          totalPages: totalPages,
+          totalBugs: totalBugs,
+          hasNextPage: page < totalPages,
           hasPrevPage: page > 1,
-          nextPage: page < filteredTotalPages ? page + 1 : null,
+          nextPage: page < totalPages ? page + 1 : null,
           prevPage: page > 1 ? page - 1 : null
         }
       });
@@ -514,21 +502,21 @@ app.put('/api/bugs/:id', authenticateToken, async (req, res) => {
 
     // Log the operation
     await logOperation(
-      req.user.username, 
-      operation, 
-      bug._id.toString(), 
-      originalBug.title, 
-      details, 
+      req.user.username,
+      operation,
+      bug._id.toString(),
+      originalBug.title,
+      details,
       req,
-      { 
-        pims: originalBug.pims, 
-        tester: originalBug.tester, 
-        date: originalBug.date, 
-        tcid: originalBug.tcid 
+      {
+        pims: originalBug.pims,
+        tester: originalBug.tester,
+        date: originalBug.date,
+        tcid: originalBug.tcid
       }
     );
 
-    res.json({ message: 'Bug record updated' });
+    res.json({ message: 'Bug record updated', bug });
   } catch (error) {
     console.error('Update bug error:', error);
     res.status(500).json({ message: 'Error updating bug record' });
@@ -642,294 +630,6 @@ app.get('/api/logs/download', authenticateToken, async (req, res) => {
   }
 });
 
-// Google Sheets Import route
-app.post('/api/import-google-sheet', authenticateToken, async (req, res) => {
-  const { google } = require('googleapis');
-  const { GoogleAuth } = require('google-auth-library');
-  
-  try {
-    const { sheetId, sheetName } = req.body;
-    
-    if (!sheetId || !sheetName) {
-      return res.status(400).json({ 
-        message: 'Sheet ID and sheet name are required' 
-      });
-    }
-    
-    // Check if service account credentials are provided
-    
-    if (!process.env.GOOGLE_PRIVATE_KEY_ID || 
-        !process.env.GOOGLE_PRIVATE_KEY || 
-        !process.env.GOOGLE_CLIENT_ID ||
-        process.env.GOOGLE_PRIVATE_KEY.includes('your_private_key_here') ||
-        process.env.GOOGLE_PRIVATE_KEY_ID.includes('your_private_key_id_here')) {
-      
-      return res.status(400).json({
-        message: 'Google service account credentials not configured',
-        details: 'Please add your Google service account credentials to the .env file:\n\nGOOGLE_PRIVATE_KEY_ID=your_actual_private_key_id\nGOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\nyour_actual_private_key\\n-----END PRIVATE KEY-----"\nGOOGLE_CLIENT_ID=your_actual_client_id\n\nThen share the Google Sheet with: myname@ddmtest-310706.iam.gserviceaccount.com',
-        sheetUrl: `https://docs.google.com/spreadsheets/d/${sheetId}`,
-        serviceAccountEmail: process.env.GOOGLE_CLIENT_EMAIL
-      });
-    }
-
-    // Configure service account authentication
-    const privateKey = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
-    
-    const auth = new GoogleAuth({
-      credentials: {
-        type: 'service_account',
-        project_id: process.env.GOOGLE_PROJECT_ID,
-        private_key_id: process.env.GOOGLE_PRIVATE_KEY_ID,
-        private_key: privateKey,
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        client_id: process.env.GOOGLE_CLIENT_ID,
-        auth_uri: 'https://accounts.google.com/o/oauth2/auth',
-        token_uri: 'https://oauth2.googleapis.com/token',
-        auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
-        client_x509_cert_url: process.env.GOOGLE_CLIENT_X509_CERT_URL
-      },
-      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
-    });
-
-    const sheets = google.sheets({ version: 'v4', auth });
-    
-    // Get spreadsheet data - expanded to include more columns for notes
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetId,
-      range: `${sheetName}!A:Z`,
-    });
-    
-    const rows = response.data.values;
-    if (!rows || rows.length === 0) {
-      return res.status(400).json({ message: 'No data found in the sheet' });
-    }
-    
-    // Skip header row and process data
-    const headers = rows[0];
-    const dataRows = rows.slice(1);
-    
-    console.log('Headers found:', headers);
-    console.log('Data rows:', dataRows.length);
-    
-    // Map Google Sheet data to bug schema
-    const bugs = dataRows.map((row, index) => {
-      try {
-        // Create a mapping object from headers to values
-        const rowData = {};
-        headers.forEach((header, i) => {
-          rowData[header] = row[i] || '';
-        });
-        
-        // Map column C specifically for PIMS notes (Column C is index 2)
-        rowData['ColumnC'] = row[2] || '';
-        
-        // Extract comments/notes from Column C (PIMS column)
-        // If Column C contains PIMS data with notes, we need to extract the notes part
-        let pimsColumnData = row[2] || '';
-        let extractedComments = '';
-        
-        // Check if Column C contains note patterns (looking for common note indicators)
-        if (pimsColumnData && typeof pimsColumnData === 'string') {
-          // Look for patterns like "PIMS-123456, note content" or notes after certain keywords
-          const notePatterns = [
-            /(?:update|note|info|comment|remark|fail|pass)[:：]\s*(.+)/i,
-            /(?:\d+\/\d+\s+update|note|info)[:：]?\s*(.+)/i,
-            /(?:BIOS|bios)[:：]\s*(.+)/i,
-            /(?:fail|error|issue)[:：]?\s*(.+)/i
-          ];
-          
-          for (const pattern of notePatterns) {
-            const match = pimsColumnData.match(pattern);
-            if (match && match[1]) {
-              extractedComments = match[1].trim();
-              break;
-            }
-          }
-          
-          // If no pattern matched but there's content after PIMS-XXXXXX, extract it
-          if (!extractedComments) {
-            const pimsMatch = pimsColumnData.match(/PIMS-\d+[,\s]*(.+)/i);
-            if (pimsMatch && pimsMatch[1]) {
-              extractedComments = pimsMatch[1].trim();
-            }
-          }
-        }
-        
-        rowData['ExtractedComments'] = extractedComments;
-        
-        // Debug: Log first few rows to see what we're getting
-        if (index < 5) {
-          console.log(`Row ${index + 1} - Column C (PIMS):`, pimsColumnData);
-          console.log(`Row ${index + 1} - Extracted Comments:`, extractedComments);
-        }
-        
-        // Handle date conversion if needed
-        let dateValue = rowData['Date'] || new Date().toISOString().split('T')[0];
-        if (typeof dateValue === 'number') {
-          // Excel serial date conversion
-          const excelEpoch = new Date(1900, 0, 1);
-          const date = new Date(excelEpoch.getTime() + (dateValue - 1) * 24 * 60 * 60 * 1000);
-          dateValue = date.toISOString().split('T')[0];
-        }
-        
-        return {
-          status: rowData['Status'] || 'pending',
-          tcid: rowData['TCID'] || '',
-          pims: rowData['PIMS'] || '',
-          tester: rowData['Tester'] || 'Unknown',
-          date: dateValue,
-          stage: rowData['Stage'] || '',
-          product_customer_likelihood: rowData['Product/Customer/Likelihood'] || '',
-          test_case_name: rowData['TestCaseName'] || rowData['Test Case Name'] || `Test Case ${index + 1}`,
-          chinese: rowData['Chinese'] || '',
-          title: rowData['Title'] || `Bug ${index + 1}`,
-          system_information: rowData['System information'] || rowData['System Information'] || '',
-          description: rowData['Description'] || '',
-          link: rowData['Link'] || rowData['Links'] || '',
-          comments: rowData['ExtractedComments'] || rowData['Note'] || rowData['Notes'] || rowData['Comment'] || rowData['Comments'] || rowData['PIMS Note'] || rowData['ColumnC'] || ''
-        };
-      } catch (error) {
-        console.error(`Error processing row ${index + 1}:`, error);
-        return null;
-      }
-    }).filter(bug => bug !== null);
-    
-    console.log('Processed bugs:', bugs.length);
-    
-    // Import bugs using upsert mechanism to handle both new and existing bugs
-    const batchSize = 100;
-    let importedCount = 0;
-    let updatedCount = 0;
-    let skippedCount = 0;
-    let errorCount = 0;
-    
-    for (let i = 0; i < bugs.length; i += batchSize) {
-      const batch = bugs.slice(i, i + batchSize);
-      
-      try {
-        // Filter out records with missing required fields
-        const validBugs = batch.filter(bug => {
-          const isValid = bug.status && bug.tester && bug.date && bug.test_case_name && bug.title &&
-                 bug.tcid && bug.tcid.trim() !== '' &&
-                 bug.stage && bug.stage.trim() !== '' &&
-                 bug.product_customer_likelihood && bug.product_customer_likelihood.trim() !== '';
-
-          // Log why bugs are rejected
-          if (!isValid) {
-            const missingFields = [];
-            if (!bug.status) missingFields.push('status');
-            if (!bug.tester) missingFields.push('tester');
-            if (!bug.date) missingFields.push('date');
-            if (!bug.test_case_name) missingFields.push('test_case_name');
-            if (!bug.title) missingFields.push('title');
-            if (!bug.tcid || bug.tcid.trim() === '') missingFields.push('tcid');
-            if (!bug.stage || bug.stage.trim() === '') missingFields.push('stage');
-            if (!bug.product_customer_likelihood || bug.product_customer_likelihood.trim() === '') missingFields.push('product_customer_likelihood');
-
-            console.log(`❌ REJECTED - PIMS: ${bug.pims || 'N/A'}, TCID: ${bug.tcid || 'N/A'}, Title: ${bug.title || 'N/A'}`);
-            console.log(`   Missing/empty required fields: ${missingFields.join(', ')}`);
-          }
-
-          return isValid;
-        });
-        
-        // Process each bug individually with upsert
-        for (const bug of validBugs) {
-          try {
-            // Use composite unique identifier to handle duplicate TCIDs properly
-            // Combine multiple fields to ensure each bug is truly unique
-            const uniqueQuery = bug.tcid && bug.tcid.trim() !== '' 
-              ? { 
-                  tcid: bug.tcid,
-                  title: bug.title,
-                  tester: bug.tester
-                }
-              : { title: bug.title, tester: bug.tester, date: bug.date };
-            
-            const result = await Bug.updateOne(
-              uniqueQuery,
-              {
-                $set: bug,
-                $setOnInsert: {
-                  _id: new mongoose.Types.ObjectId()
-                }
-              },
-              {
-                upsert: true,
-                new: true
-              }
-            );
-
-            if (result.upsertedCount > 0) {
-              importedCount++;
-              console.log(`✅ Created new bug: ${bug.tcid} - ${bug.title}`);
-            } else if (result.modifiedCount > 0) {
-              updatedCount++;
-              console.log(`🔄 Updated existing bug: ${bug.tcid} - ${bug.title}`);
-            } else if (result.matchedCount > 0) {
-              // Bug was matched but no fields changed (data identical)
-              skippedCount++;
-              console.log(`⏭️  Skipped (no changes): ${bug.tcid} - ${bug.title}`);
-            } else {
-              console.log(`❓ Unknown result for: ${bug.tcid} - ${bug.title}`, result);
-            }
-          } catch (bugError) {
-            console.error(`Error processing bug:`, bugError.message);
-            errorCount++;
-          }
-        }
-        
-        errorCount += batch.length - validBugs.length;
-      } catch (error) {
-        console.error(`Batch processing error:`, error.message);
-        errorCount += batch.length;
-      }
-    }
-    
-    res.json({
-      message: 'Google Sheet import completed',
-      totalRows: dataRows.length,
-      imported: importedCount,
-      updated: updatedCount,
-      skipped: skippedCount,
-      errors: errorCount,
-      headers: headers
-    });
-    
-  } catch (error) {
-    console.error('Google Sheets import error:', error);
-    
-    if (error.message.includes('permission') || error.message.includes('PERMISSION_DENIED')) {
-      return res.status(403).json({ 
-        message: 'Google Sheet access denied',
-        details: 'The sheet needs to be publicly shared. Please:\n1. Open the Google Sheet\n2. Click "Share" button\n3. Change access to "Anyone with the link can view"\n4. Try importing again',
-        sheetUrl: `https://docs.google.com/spreadsheets/d/${sheetId}`
-      });
-    } else if (error.message.includes('API key')) {
-      return res.status(401).json({ 
-        message: 'Invalid API key',
-        details: 'The Google Sheets API key may be invalid or expired.'
-      });
-    } else if (error.message.includes('not found') || error.message.includes('404')) {
-      return res.status(404).json({ 
-        message: 'Sheet or tab not found',
-        details: `Could not find sheet "${sheetName}" in the Google Sheet. Please verify the sheet name.`
-      });
-    } else if (error.message.includes('400')) {
-      return res.status(400).json({
-        message: 'Invalid sheet parameters',
-        details: 'Please check that the Sheet ID and sheet name are correct.'
-      });
-    }
-    
-    res.status(500).json({ 
-      message: 'Import failed', 
-      details: error.message,
-      troubleshooting: 'Please ensure the Google Sheet is publicly accessible and the API key is valid.'
-    });
-  }
-});
-
 // Translation endpoint using Gemini API
 app.post('/api/translate', authenticateToken, async (req, res) => {
   try {
@@ -941,7 +641,7 @@ app.post('/api/translate', authenticateToken, async (req, res) => {
 
     const GEMINI_API_KEY = 'AIzaSyCJw1El-XzIlAnmvMwyhVkv0Ll0j8xPcdQ';
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         contents: [{
           parts: [{
@@ -979,7 +679,7 @@ app.post('/api/correct-grammar', authenticateToken, async (req, res) => {
 
     const GEMINI_API_KEY = 'AIzaSyCJw1El-XzIlAnmvMwyhVkv0Ll0j8xPcdQ';
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         contents: [{
           parts: [{
@@ -1014,6 +714,66 @@ app.post('/api/correct-grammar', authenticateToken, async (req, res) => {
       message: 'Grammar correction failed',
       error: error.response?.data?.error?.message || error.message
     });
+  }
+});
+
+// Database backup endpoint
+app.get('/api/backup', authenticateToken, async (req, res) => {
+  try {
+    console.log('Starting database backup...');
+
+    // Get all collections data
+    const bugs = await Bug.find({}).lean();
+    const users = await User.find({}).select('-password').lean(); // Exclude passwords
+    const logs = await OperationLog.find({}).lean();
+
+    console.log(`Backup data retrieved: ${bugs.length} bugs, ${users.length} users, ${logs.length} logs`);
+
+    // Set headers for ZIP file download
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="bugtracker.zip"');
+
+    // Create archiver instance
+    const archive = archiver('zip', {
+      zlib: { level: 9 } // Maximum compression
+    });
+
+    // Handle archive errors
+    archive.on('error', (err) => {
+      console.error('Archive error:', err);
+      throw err;
+    });
+
+    // Pipe archive to response
+    archive.pipe(res);
+
+    // Add JSON files to the archive
+    archive.append(JSON.stringify(bugs, null, 2), { name: 'bugs.json' });
+    archive.append(JSON.stringify(users, null, 2), { name: 'users.json' });
+    archive.append(JSON.stringify(logs, null, 2), { name: 'operationlogs.json' });
+
+    // Log the backup operation
+    await logOperation(
+      req.user.username,
+      'DATABASE_BACKUP',
+      'bugtracker',
+      'Database backup created: bugtracker.zip',
+      `Backed up ${bugs.length} bugs, ${users.length} users, ${logs.length} logs`,
+      req
+    );
+
+    // Finalize the archive (finish appending files and close the stream)
+    await archive.finalize();
+
+    console.log('Backup ZIP created successfully');
+  } catch (error) {
+    console.error('Database backup error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        message: 'Error creating database backup',
+        error: error.message
+      });
+    }
   }
 });
 
