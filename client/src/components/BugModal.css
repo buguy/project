@@ -902,12 +902,6 @@ body.modal-open {
   justify-content: center;
   position: relative;
   overflow: hidden;
-  opacity: 0;
-  visibility: hidden;
-  transform: scale(0.8);
-}
-
-.links-section:hover .add-link-btn {
   opacity: 1;
   visibility: visible;
   transform: scale(1);
