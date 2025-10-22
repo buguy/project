@@ -100,6 +100,9 @@ const BugList = () => {
   // Current user state
   const [currentUser, setCurrentUser] = useState('');
 
+  // Last refresh timestamp
+  const [lastRefresh, setLastRefresh] = useState(new Date());
+
   // Debounce timeout reference
   const debounceTimeout = React.useRef(null);
 
@@ -160,6 +163,21 @@ const BugList = () => {
       fetchCurrentUser();
     }
   }, []);
+
+  // Auto-refresh: Poll for updates every 30 seconds
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    // Set up polling interval
+    const pollInterval = setInterval(() => {
+      console.log('🔄 Auto-refreshing bug list...');
+      fetchBugs(currentPage, false, 0);
+    }, 30000); // 30 seconds
+
+    // Cleanup interval on unmount
+    return () => clearInterval(pollInterval);
+  }, [currentPage]); // Re-setup interval when page changes
 
   const fetchCurrentUser = async () => {
     try {
@@ -242,6 +260,9 @@ const BugList = () => {
         hasNextPage: page < totalPages,
         hasPrevPage: page > 1
       });
+
+      // Update last refresh timestamp
+      setLastRefresh(new Date());
 
     } catch (error) {
       console.error('Error fetching bugs:', error);
@@ -1181,6 +1202,18 @@ const BugList = () => {
                           Add New Bug
                         </Typography>
                       </Box>
+
+                      {/* Last Updated Indicator */}
+                      <Typography sx={{
+                        fontSize: '10px',
+                        color: '#64748b',
+                        fontStyle: 'italic',
+                        whiteSpace: 'nowrap',
+                        marginLeft: 'auto',
+                        paddingLeft: '12px'
+                      }}>
+                        Updated: {lastRefresh.toLocaleTimeString()}
+                      </Typography>
                     </Box>
                   );
                 })()}
