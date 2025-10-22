@@ -814,11 +814,19 @@ body.modal-open {
   padding: 1.25rem;
   transition: all 0.2s ease;
   position: relative;
+  margin-bottom: 1.5rem;
 }
 
 .links-section:hover {
   border-color: #dee2e6;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* Add button container for right alignment */
+.links-section > .add-link-btn {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
 }
 
 .no-links-message {
@@ -1225,10 +1233,12 @@ body.modal-open {
     padding: 1rem;
   }
 
-  .add-link-btn {
+  .links-section > .add-link-btn {
+    position: static;
     width: 100%;
     justify-content: center;
     padding: 0.75rem 1.25rem;
+    margin-bottom: 1rem;
   }
 
   .link-field-row {
