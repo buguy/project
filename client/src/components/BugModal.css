@@ -792,6 +792,19 @@ body.modal-open {
   font-style: italic;
 }
 
+/* Links Field Header - matches Description Field Header */
+.links-field-header {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  margin-bottom: 0.625rem;
+  gap: 1rem;
+}
+
+.links-field-header label {
+  margin-bottom: 0;
+}
+
 /* Dynamic link fields styling - Modern redesign */
 .links-section {
   width: 100%;
@@ -799,8 +812,8 @@ body.modal-open {
   border: 1px solid #e9ecef;
   border-radius: 12px;
   padding: 1.25rem;
-  margin-top: 0.5rem;
   transition: all 0.2s ease;
+  position: relative;
 }
 
 .links-section:hover {
@@ -820,21 +833,6 @@ body.modal-open {
   margin-top: 0.5rem;
 }
 
-.links-header {
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  margin-bottom: 0.625rem;
-  gap: 1rem;
-}
-
-.links-header label {
-  margin-bottom: 0;
-  font-weight: 500;
-  color: #2c3e50;
-  font-size: 0.875rem;
-  letter-spacing: 0.025em;
-}
 
 .convert-all-paths-btn {
   background: transparent;
@@ -1212,12 +1210,7 @@ body.modal-open {
   }
 
   /* Mobile responsive styles for Links section */
-  .links-section {
-    padding: 1rem;
-    margin-top: 0.25rem;
-  }
-
-  .links-header {
+  .links-field-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.5rem;
@@ -1226,6 +1219,10 @@ body.modal-open {
   .convert-all-paths-btn {
     width: 100%;
     margin-left: 0;
+  }
+
+  .links-section {
+    padding: 1rem;
   }
 
   .add-link-btn {
