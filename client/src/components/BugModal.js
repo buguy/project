@@ -158,11 +158,67 @@ Expectation: `;
     });
   };
 
+  // Convert Mac path to Windows path format
+  const convertMacToWindowsPath = (path) => {
+    // Remove leading/trailing whitespace
+    let converted = path.trim();
+
+    // Check if it's a Mac path (starts with /Volumes/)
+    if (converted.startsWith('/Volumes/')) {
+      // Remove /Volumes/ prefix
+      converted = converted.replace(/^\/Volumes\//, '');
+
+      // Split by the first slash to separate server/share from the rest
+      const parts = converted.split('/');
+      if (parts.length >= 2) {
+        // First part is the server/share name (e.g., "Windows")
+        const shareName = parts[0];
+        // Rest is the path
+        const restPath = parts.slice(1).join('\\');
+
+        // Construct Windows UNC path
+        converted = `"\\\\SDQA-SEVER\\${shareName}\\${restPath}"`;
+      }
+    }
+    // Check if it's already a Windows path but missing quotes
+    else if (converted.startsWith('\\\\') && !converted.startsWith('"')) {
+      converted = `"${converted}"`;
+    }
+
+    return converted;
+  };
+
   const handleLinkChange = (id, value) => {
-    setLinkFields(prev => 
-      prev.map(field => 
+    setLinkFields(prev =>
+      prev.map(field =>
         field.id === id ? { ...field, value } : field
       )
+    );
+  };
+
+  // Auto-convert path on paste
+  const handleLinkPaste = (id, e) => {
+    e.preventDefault();
+    const pastedText = e.clipboardData.getData('text');
+    const convertedPath = convertMacToWindowsPath(pastedText);
+
+    setLinkFields(prev =>
+      prev.map(field =>
+        field.id === id ? { ...field, value: convertedPath } : field
+      )
+    );
+  };
+
+  // Manual convert button handler
+  const convertLinkPath = (id) => {
+    setLinkFields(prev =>
+      prev.map(field => {
+        if (field.id === id) {
+          const converted = convertMacToWindowsPath(field.value);
+          return { ...field, value: converted };
+        }
+        return field;
+      })
     );
   };
 
@@ -929,8 +985,17 @@ Expectation: `;
                       type="text"
                       value={field.value}
                       onChange={(e) => handleLinkChange(field.id, e.target.value)}
+                      onPaste={(e) => handleLinkPaste(field.id, e)}
                       placeholder="&quot;\\sdqa-server\Windows\Log&quot;"
                                           />
+                    <button
+                      type="button"
+                      onClick={() => convertLinkPath(field.id)}
+                      className="convert-path-btn"
+                      title="Convert Mac path to Windows format"
+                                          >
+                      <span className="convert-icon">🔄</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => removeLinkField(field.id)}
