@@ -39,6 +39,7 @@ const BugModal = ({ bug, onSave, onClose }) => {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [deletingMeetingIndex, setDeletingMeetingIndex] = useState(null);
   const [deletingCommentIndex, setDeletingCommentIndex] = useState(null);
+  const [fixingGrammar, setFixingGrammar] = useState(false);
 
   // Check if PIMS starts with "PIMS-" to disable fields
   const isPimsLocked = formData.pims && formData.pims.toLowerCase().startsWith('pims-');
@@ -397,6 +398,33 @@ Expectation: `;
     }
   };
 
+  const fixCommentGrammar = async () => {
+    if (!newComment.trim()) {
+      setError('Please enter a comment to fix grammar');
+      return;
+    }
+
+    setFixingGrammar(true);
+    setError('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post('/api/correct-grammar', {
+        text: newComment
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const correctedText = response.data.correctedText;
+      setNewComment(correctedText);
+    } catch (error) {
+      console.error('Grammar correction error:', error);
+      setError(error.response?.data?.message || 'Failed to fix grammar. Please try again.');
+    } finally {
+      setFixingGrammar(false);
+    }
+  };
+
   const handleDeleteMeeting = async (indexToDelete) => {
     setDeletingMeetingIndex(indexToDelete);
     setError('');
@@ -561,6 +589,15 @@ Expectation: `;
                     <span className="section-icon">✏️</span>
                     Add New Comment
                   </div>
+                  <button
+                    type="button"
+                    className="grammar-fix-btn"
+                    disabled={fixingGrammar || !newComment.trim()}
+                    onClick={fixCommentGrammar}
+                    title="Fix grammar using AI"
+                  >
+                    {fixingGrammar ? 'Fixing...' : 'Grammar Fix'}
+                  </button>
                 </div>
 
                 <div className="comment-input-container">

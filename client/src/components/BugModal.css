@@ -148,6 +148,7 @@
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
   border-bottom: 2px solid var(--border-light);
+  gap: 1rem;
 }
 
 .section-title {
@@ -307,14 +308,46 @@
 
 .input-helper {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
+  gap: 0.5rem;
   margin-top: 0.5rem;
 }
 
 .char-count {
   font-size: 0.8rem;
   color: var(--text-muted);
+}
+
+.grammar-fix-btn {
+  background: transparent;
+  color: var(--secondary-green);
+  border: 1px solid var(--secondary-green);
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: auto;
+  white-space: nowrap;
+  width: fit-content;
+}
+
+.grammar-fix-btn:hover:not(:disabled) {
+  background: var(--secondary-green);
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.grammar-fix-btn:disabled {
+  background: transparent;
+  color: var(--neutral-400);
+  border-color: var(--neutral-300);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .add-comment-btn {
