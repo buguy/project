@@ -822,11 +822,11 @@ body.modal-open {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
-/* Add button container for right alignment */
-.links-section > .add-link-btn {
-  position: absolute;
-  top: 1.25rem;
-  right: 1.25rem;
+/* Add button row at top */
+.links-add-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
 }
 
 .no-links-message {
@@ -900,11 +900,8 @@ body.modal-open {
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
   overflow: hidden;
-  opacity: 1;
-  visibility: visible;
-  transform: scale(1);
+  flex-shrink: 0;
 }
 
 
@@ -1227,12 +1224,14 @@ body.modal-open {
     padding: 1rem;
   }
 
-  .links-section > .add-link-btn {
-    position: static;
+  .links-add-row {
+    justify-content: stretch;
+  }
+
+  .links-add-row .add-link-btn {
     width: 100%;
-    justify-content: center;
-    padding: 0.75rem 1.25rem;
-    margin-bottom: 1rem;
+    border-radius: 8px;
+    height: 2.5rem;
   }
 
   .link-field-row {

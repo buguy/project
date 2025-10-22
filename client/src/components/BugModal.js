@@ -971,14 +971,16 @@ Expectation: `;
               </button>
             </div>
             <div className="links-section">
-              <button
-                type="button"
-                onClick={addLinkField}
-                className="add-link-btn"
-                title="Add Link"
-                                  >
-                +
-              </button>
+              <div className="links-add-row">
+                <button
+                  type="button"
+                  onClick={addLinkField}
+                  className="add-link-btn"
+                  title="Add Link"
+                                    >
+                  +
+                </button>
+              </div>
 
               {linkFields.length === 0 ? (
                 <div className="no-links-message">
