@@ -961,25 +961,23 @@ Expectation: `;
             <div className="links-section">
               <div className="links-header">
                 <label>Links</label>
-                <div className="links-header-buttons">
-                  <button
-                    type="button"
-                    onClick={convertAllLinkPaths}
-                    className="convert-all-paths-btn"
-                    title="Convert all paths to Windows format"
-                    disabled={linkFields.length === 0}
-                                      >
-                    Convert Path
-                  </button>
-                  <button
-                    type="button"
-                    onClick={addLinkField}
-                    className="add-link-btn"
-                    title="Add Link"
-                                      >
-                    +
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={convertAllLinkPaths}
+                  className="convert-all-paths-btn"
+                  title="Convert all paths to Windows format"
+                  disabled={linkFields.length === 0}
+                                    >
+                  Convert Path
+                </button>
+                <button
+                  type="button"
+                  onClick={addLinkField}
+                  className="add-link-btn"
+                  title="Add Link"
+                                    >
+                  +
+                </button>
               </div>
 
               {linkFields.length === 0 ? (
