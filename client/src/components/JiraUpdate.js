@@ -91,6 +91,12 @@ const JiraUpdate = () => {
     onConfirm: null
   });
 
+  // State to track which PIMS field is showing "Saved" tooltip
+  const [savedPimsId, setSavedPimsId] = useState(null);
+
+  // State to track which title is showing "Copied" tooltip
+  const [copiedTitleId, setCopiedTitleId] = useState(null);
+
   // Filter options from backend
   const [filterOptions, setFilterOptions] = useState({
     testers: [],
@@ -286,7 +292,12 @@ const JiraUpdate = () => {
 
       // Update the editing bug state so modal shows the updated data
       if (!shouldCloseModal) {
-        setEditingBug(updatedBug);
+        // Preserve the mode flags when updating
+        setEditingBug({
+          ...updatedBug,
+          isCommentMode: editingBug?.isCommentMode,
+          isMeetingMode: editingBug?.isMeetingMode
+        });
       }
 
       // Don't fetch operation logs for comments/meetings to avoid any loading
@@ -573,6 +584,28 @@ const JiraUpdate = () => {
       document.execCommand('copy');
       document.body.removeChild(textArea);
       showCopiedMessage(buttonElement);
+    }
+  };
+
+  const handleTitleClick = async (title, bugId) => {
+    try {
+      await navigator.clipboard.writeText(title);
+      setCopiedTitleId(bugId);
+      setTimeout(() => {
+        setCopiedTitleId(null);
+      }, 2000); // Hide after 2 seconds
+    } catch (err) {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = title;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCopiedTitleId(bugId);
+      setTimeout(() => {
+        setCopiedTitleId(null);
+      }, 2000);
     }
   };
 
@@ -983,10 +1016,7 @@ const JiraUpdate = () => {
                             textAlign: 'center',
                             lineHeight: 1.2
                           }}>
-                            {new Date(bug.date).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric'
-                            })}
+                            {new Date(bug.date).toLocaleDateString('en-CA')}
                           </Typography>
                         </Box>
 
@@ -994,16 +1024,49 @@ const JiraUpdate = () => {
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                           {/* Title with Action Buttons */}
                           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Typography variant="h6" sx={{
-                              fontSize: '15.5px',
-                              fontWeight: 700,
-                              color: '#34656D',
-                              flex: 1,
-                              marginRight: 2,
-                              lineHeight: 1.35
-                            }}>
-                              {bug.title}
-                            </Typography>
+                            <Tooltip
+                              title={copiedTitleId === bug._id ? "Copied" : "Click to copy"}
+                              open={copiedTitleId === bug._id ? true : undefined}
+                              arrow
+                              placement="top"
+                              componentsProps={{
+                                tooltip: {
+                                  sx: {
+                                    backgroundColor: copiedTitleId === bug._id ? '#10b981' : '#1f2937',
+                                    color: 'white',
+                                    fontSize: '12px',
+                                    padding: '6px 12px',
+                                    fontWeight: 600,
+                                    boxShadow: copiedTitleId === bug._id ? '0 4px 6px rgba(16, 185, 129, 0.3)' : '0 4px 6px rgba(0, 0, 0, 0.3)'
+                                  }
+                                },
+                                arrow: {
+                                  sx: {
+                                    color: copiedTitleId === bug._id ? '#10b981' : '#1f2937'
+                                  }
+                                }
+                              }}
+                            >
+                              <Typography
+                                variant="h6"
+                                onClick={() => handleTitleClick(bug.title, bug._id)}
+                                sx={{
+                                  fontSize: '15.5px',
+                                  fontWeight: 700,
+                                  color: '#34656D',
+                                  flex: 1,
+                                  marginRight: 2,
+                                  lineHeight: 1.35,
+                                  cursor: 'pointer',
+                                  transition: 'color 0.2s ease',
+                                  '&:hover': {
+                                    color: '#2563eb'
+                                  }
+                                }}
+                              >
+                                {bug.title}
+                              </Typography>
+                            </Tooltip>
                             <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
                               <Tooltip title="Edit">
                                 <IconButton
@@ -1044,83 +1107,6 @@ const JiraUpdate = () => {
                             flexWrap: 'nowrap',
                             width: '100%'
                           }}>
-                        {/* PIMS */}
-                          <TextField
-                            variant="outlined"
-                            size="small"
-                            value={bug.pims || ''}
-                            onBlur={async (e) => {
-                              // Auto-save on blur (unfocus)
-                              const newValue = e.target.value;
-                              if (newValue !== bug.pims) {
-                                const updatedBug = { ...bug, pims: newValue };
-
-                                // Update local state immediately
-                                setBugs(prevBugs =>
-                                  prevBugs.map(b => b._id === bug._id ? updatedBug : b)
-                                );
-                                setFilteredBugs(prevBugs =>
-                                  prevBugs.map(b => b._id === bug._id ? updatedBug : b)
-                                );
-
-                                // Auto-save to backend
-                                try {
-                                  const token = localStorage.getItem('token');
-                                  await axios.put(`/api/bugs/${bug._id}`, updatedBug, {
-                                    headers: { Authorization: `Bearer ${token}` }
-                                  });
-
-                                  console.log('PIMS updated successfully');
-                                } catch (error) {
-                                  console.error('Failed to update PIMS:', error);
-                                  // Revert local state if save fails
-                                  setBugs(prevBugs =>
-                                    prevBugs.map(b => b._id === bug._id ? bug : b)
-                                  );
-                                  setFilteredBugs(prevBugs =>
-                                    prevBugs.map(b => b._id === bug._id ? bug : b)
-                                  );
-                                }
-                              }
-                            }}
-                            onChange={(e) => {
-                              // Update local state while typing (without saving)
-                              const updatedBug = { ...bug, pims: e.target.value };
-                              setBugs(prevBugs =>
-                                prevBugs.map(b => b._id === bug._id ? updatedBug : b)
-                              );
-                              setFilteredBugs(prevBugs =>
-                                prevBugs.map(b => b._id === bug._id ? updatedBug : b)
-                              );
-                            }}
-                            sx={{
-                              flex: 1,
-                              minWidth: 0,
-                              '& .MuiOutlinedInput-root': {
-                                height: '28px',
-                                fontSize: '13px',
-                                fontWeight: 600,
-                                color: '#1e40af',
-                                '& fieldset': {
-                                  border: '1px solid #d1d5db',
-                                  borderRadius: '0px'
-                                },
-                                '&:hover fieldset': {
-                                  border: '1px solid #3b82f6'
-                                },
-                                '&.Mui-focused fieldset': {
-                                  border: '2px solid #3b82f6'
-                                }
-                              },
-                              '& .MuiOutlinedInput-input': {
-                                padding: '5px 8px',
-                                fontSize: '13px',
-                                fontWeight: 600,
-                                color: '#2563eb'
-                              }
-                            }}
-                          />
-
                         {/* Status */}
                           <FormControl size="small" sx={{ flex: 1, minWidth: 0 }}>
                             <Select
@@ -1226,6 +1212,126 @@ const JiraUpdate = () => {
                               ))}
                             </Select>
                           </FormControl>
+
+                        {/* PIMS */}
+                          <Tooltip
+                            title="Saved"
+                            open={savedPimsId === bug._id}
+                            arrow
+                            placement="top"
+                            componentsProps={{
+                              tooltip: {
+                                sx: {
+                                  backgroundColor: '#10b981',
+                                  color: 'white',
+                                  fontSize: '12px',
+                                  padding: '6px 12px',
+                                  fontWeight: 600,
+                                  boxShadow: '0 4px 6px rgba(16, 185, 129, 0.3)'
+                                }
+                              },
+                              arrow: {
+                                sx: {
+                                  color: '#10b981'
+                                }
+                              }
+                            }}
+                          >
+                            <TextField
+                              variant="outlined"
+                              size="small"
+                              value={bug.pims || ''}
+                              onFocus={(e) => {
+                                // Store original value when focus starts
+                                e.target.dataset.originalValue = bug.pims || '';
+                                // Clear saved tooltip when focusing
+                                setSavedPimsId(null);
+                              }}
+                              onBlur={async (e) => {
+                                // Auto-save on blur (unfocus)
+                                const newValue = e.target.value;
+                                const originalValue = e.target.dataset.originalValue || '';
+
+                                console.log('PIMS onBlur - Original:', originalValue, 'New:', newValue);
+
+                                if (newValue !== originalValue) {
+                                  const updatedBug = { ...bug, pims: newValue };
+
+                                  // Auto-save to backend first
+                                  try {
+                                    const token = localStorage.getItem('token');
+                                    await axios.put(`/api/bugs/${bug._id}`, updatedBug, {
+                                      headers: { Authorization: `Bearer ${token}` }
+                                    });
+
+                                    console.log('✅ PIMS updated successfully:', newValue);
+
+                                    // Update local state after successful save
+                                    setBugs(prevBugs =>
+                                      prevBugs.map(b => b._id === bug._id ? updatedBug : b)
+                                    );
+                                    setFilteredBugs(prevBugs =>
+                                      prevBugs.map(b => b._id === bug._id ? updatedBug : b)
+                                    );
+
+                                    // Show "Saved" tooltip
+                                    setSavedPimsId(bug._id);
+                                    setTimeout(() => {
+                                      setSavedPimsId(null);
+                                    }, 2000); // Hide after 2 seconds
+                                  } catch (error) {
+                                    console.error('❌ Failed to update PIMS:', error);
+                                    // Revert to original value on failure
+                                    const revertedBug = { ...bug, pims: originalValue };
+                                    setBugs(prevBugs =>
+                                      prevBugs.map(b => b._id === bug._id ? revertedBug : b)
+                                    );
+                                    setFilteredBugs(prevBugs =>
+                                      prevBugs.map(b => b._id === bug._id ? revertedBug : b)
+                                    );
+                                  }
+                                } else {
+                                  console.log('ℹ️ PIMS unchanged, no save needed');
+                                }
+                              }}
+                              onChange={(e) => {
+                                // Update local state while typing (without saving)
+                                const updatedBug = { ...bug, pims: e.target.value };
+                                setBugs(prevBugs =>
+                                  prevBugs.map(b => b._id === bug._id ? updatedBug : b)
+                                );
+                                setFilteredBugs(prevBugs =>
+                                  prevBugs.map(b => b._id === bug._id ? updatedBug : b)
+                                );
+                              }}
+                              sx={{
+                                flex: 1,
+                                minWidth: 0,
+                                '& .MuiOutlinedInput-root': {
+                                  height: '28px',
+                                  fontSize: '13px',
+                                  fontWeight: 600,
+                                  color: '#1e40af',
+                                  '& fieldset': {
+                                    border: '1px solid #d1d5db',
+                                    borderRadius: '0px'
+                                  },
+                                  '&:hover fieldset': {
+                                    border: '1px solid #3b82f6'
+                                  },
+                                  '&.Mui-focused fieldset': {
+                                    border: '2px solid #3b82f6'
+                                  }
+                                },
+                                '& .MuiOutlinedInput-input': {
+                                  padding: '5px 8px',
+                                  fontSize: '13px',
+                                  fontWeight: 600,
+                                  color: '#2563eb'
+                                }
+                              }}
+                            />
+                          </Tooltip>
 
                         {/* TCID */}
                           <Tooltip

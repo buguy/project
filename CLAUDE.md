@@ -82,8 +82,8 @@ This is a full-stack bug tracking application with the following structure:
 - Automatic cleanup when collection exceeds 10MB
 
 ### Development Setup
-1. Backend runs on port 5000 (default, configurable via PORT env var)
-2. Frontend runs on port 3000 with proxy to http://localhost:5000
+1. Backend runs on port 5001 (default, configurable via PORT env var)
+2. Frontend runs on port 3000 with proxy to http://localhost:5001
 3. MongoDB connection required via MONGODB_URI in .env
 4. Required environment variables: JWT_SECRET, PORT, NODE_ENV, MONGODB_URI
 5. Optional: Google Sheets integration variables (GOOGLE_PRIVATE_KEY_ID, etc.)

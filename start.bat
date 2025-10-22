@@ -80,26 +80,13 @@ echo Waiting for processes to close...
 timeout /t 3 /nobreak > nul
 
 echo.
-echo Starting Backend Server (Port 5001)...
-echo ====================================
-start "Bug Tracker - Backend Server" cmd /k "cd /d %~dp0 && echo Starting backend server... && set PORT=5001 && node server.js"
-
-echo Waiting for backend to initialize...
-timeout /t 8 /nobreak > nul
-
-echo.
-echo Starting Frontend Client (Port 3001)...
-echo ====================================
-start "Bug Tracker - Frontend Client" cmd /k "cd /d %~dp0\client && echo Starting frontend client... && set PORT=3001 && npm start"
-
-echo.
 echo ========================================
 echo    System Started Successfully!
 echo ========================================
 echo.
 echo Services:
 echo   Backend API:  http://localhost:5001
-echo   Frontend App: http://localhost:3001
+echo   Frontend App: http://localhost:3000
 echo.
 echo The frontend will automatically proxy API requests to backend
 echo.
@@ -112,10 +99,26 @@ echo   - Google Sheets integration (requires .env configuration)
 echo   - Operation logging with automatic cleanup
 echo   - Comprehensive bug tracking with validation
 echo.
-echo To stop the servers:
-echo   - Close the Backend and Frontend terminal windows
-echo   - Or run: taskkill /F /IM node.exe
+echo ====================================
+echo Starting Both Servers...
+echo ====================================
 echo.
-echo Press any key to close this startup window...
-echo (The servers will continue running in separate windows)
+echo Starting Backend Server (Port 5001)...
+cd /d %~dp0
+start /B node server.js
+
+echo Waiting for backend to initialize...
+timeout /t 5 /nobreak > nul
+
+echo.
+echo Starting Frontend Client (Port 3000)...
+cd /d %~dp0\client
+npm start
+
+echo.
+echo.
+echo ========================================
+echo Both servers have stopped.
+echo To restart, run start.bat again
+echo ========================================
 pause

@@ -10,8 +10,6 @@ import './App.css';
 function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [importFunction, setImportFunction] = useState(null);
-  const [isImporting, setIsImporting] = useState(false);
   const [navCallCount, setNavCallCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
@@ -55,11 +53,6 @@ function AppContent() {
     setIsAuthenticated(false);
   };
 
-  const handleImportTrigger = (importFunc, importing) => {
-    setImportFunction(() => importFunc);
-    setIsImporting(importing);
-  };
-
   // Navigation handlers that work properly within Router context
   const handleNavigation = (path) => {
     const callNum = navCallCount + 1;
@@ -93,8 +86,6 @@ function AppContent() {
 
           <Navbar
             onLogout={handleLogout}
-            onImport={importFunction}
-            isImporting={isImporting}
             onNavigate={handleNavigation}
           />
         </>
@@ -124,7 +115,7 @@ function AppContent() {
           path="/bugs"
           element={
             isAuthenticated ? (
-              <BugList onImportTrigger={handleImportTrigger} />
+              <BugList />
             ) : (
               <Navigate to="/login" replace />
             )

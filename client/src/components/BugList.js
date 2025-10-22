@@ -103,17 +103,39 @@ const BugList = () => {
   // Debounce timeout reference
   const debounceTimeout = React.useRef(null);
 
-  // Memoized status counts for better performance
+  // Custom debounce hook for performance optimization
+  const useDebounce = (value, delay) => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+
+    useEffect(() => {
+      const handler = setTimeout(() => {
+        setDebouncedValue(value);
+      }, delay);
+
+      return () => clearTimeout(handler);
+    }, [value, delay]);
+
+    return debouncedValue;
+  };
+
+  // Debounced filter values to reduce API calls
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
+  const debouncedPims = useDebounce(selectedPims, 500);
+
+  // OPTIMIZED: Single-pass status counts calculation
   const statusCounts = useMemo(() => {
     if (!currentUser || !bugs.length) return { readyForTest: 0, fail: 0, pass: 0, total: 0 };
 
-    const userBugs = bugs.filter(bug => bug.tester === currentUser);
-    return {
-      readyForTest: userBugs.filter(bug => bug.status === 'Ready for Test').length,
-      fail: userBugs.filter(bug => bug.status === 'Fail').length,
-      pass: userBugs.filter(bug => bug.status === 'Pass').length,
-      total: userBugs.length
-    };
+    // Single reduce pass instead of multiple filters
+    return bugs.reduce((acc, bug) => {
+      if (bug.tester === currentUser) {
+        acc.total++;
+        if (bug.status === 'Ready for Test') acc.readyForTest++;
+        else if (bug.status === 'Fail') acc.fail++;
+        else if (bug.status === 'Pass') acc.pass++;
+      }
+      return acc;
+    }, { readyForTest: 0, fail: 0, pass: 0, total: 0 });
   }, [bugs, currentUser]);
 
   useEffect(() => {
@@ -249,17 +271,17 @@ const BugList = () => {
 
   // Manual search function (triggered by button click or Enter key)
   const performSearch = useCallback(() => {
-    const hasFilters = searchQuery || selectedTester || selectedStatus || selectedPims || selectedStage || startDate || endDate;
-    
+    const hasFilters = debouncedSearchQuery || selectedTester || selectedStatus || debouncedPims || selectedStage || startDate || endDate;
+
     if (hasFilters) {
       fetchBugs(1, true);
     } else {
       fetchBugs(1, false);
     }
     setCurrentPage(1);
-  }, [searchQuery, selectedTester, selectedStatus, selectedPims, selectedStage, startDate, endDate]);
+  }, [debouncedSearchQuery, selectedTester, selectedStatus, debouncedPims, selectedStage, startDate, endDate]);
 
-  // Trigger immediate search ONLY for dropdown changes (Tester, Status, Stage)
+  // OPTIMIZED: Trigger search with debounced values for text inputs
   useEffect(() => {
     if (loading) return;
 
@@ -269,7 +291,7 @@ const BugList = () => {
       return;
     }
 
-    const hasFilters = searchQuery || selectedTester || selectedStatus || selectedPims || selectedStage || startDate || endDate;
+    const hasFilters = debouncedSearchQuery || selectedTester || selectedStatus || debouncedPims || selectedStage || startDate || endDate;
 
     if (hasFilters) {
       fetchBugs(1, true);
@@ -277,7 +299,7 @@ const BugList = () => {
       fetchBugs(1, false);
     }
     setCurrentPage(1);
-  }, [selectedTester, selectedStatus, selectedStage]);
+  }, [debouncedSearchQuery, debouncedPims, selectedTester, selectedStatus, selectedStage, startDate, endDate]);
 
   const handleAddBug = () => {
     setEditingBug(null);
@@ -370,7 +392,7 @@ const BugList = () => {
       setFilteredBugs(prevBugs => [newBug, ...prevBugs]);
 
       // Clear any active filters to ensure the new bug is visible
-      if (hasActiveFilters()) {
+      if (hasFiltersActive) {
         console.log('🔵 Clearing filters to show new bug');
         clearFilters();
       } else {
@@ -490,7 +512,7 @@ const BugList = () => {
   };
 
   const handlePageChange = (page) => {
-    if (hasActiveFilters()) {
+    if (hasFiltersActive) {
       setFilteredPage(page);
     } else {
       setCurrentPage(page);
@@ -499,29 +521,39 @@ const BugList = () => {
   };
 
   const handlePrevPage = () => {
-    const paginationInfo = getFilteredPaginationInfo();
     if (paginationInfo.hasPrevPage) {
       handlePageChange(paginationInfo.currentPage - 1);
     }
   };
 
   const handleNextPage = () => {
-    const paginationInfo = getFilteredPaginationInfo();
     if (paginationInfo.hasNextPage) {
       handlePageChange(paginationInfo.currentPage + 1);
     }
   };
 
-  // Check if any filters are active
-  const hasActiveFilters = () => {
-    return searchQuery || selectedTester || selectedStatus || selectedPims || selectedStage || startDate || endDate;
-  };
-  
-  // Remove duplicates based on _id (bug database ID) only
-  // This ensures we don't deduplicate bugs with the same PIMS number
+  // Check if any filters are active - use useMemo instead of useCallback
+  const hasFiltersActive = useMemo(() => {
+    return !!(searchQuery || selectedTester || selectedStatus || selectedPims || selectedStage || startDate || endDate);
+  }, [searchQuery, selectedTester, selectedStatus, selectedPims, selectedStage, startDate, endDate]);
+
+  // Helper function to remove duplicates by _id
   const removeDuplicatesByPims = (bugs) => {
     const seen = new Set();
     return bugs.filter(bug => {
+      const uniqueKey = bug._id;
+      if (seen.has(uniqueKey)) {
+        return false;
+      }
+      seen.add(uniqueKey);
+      return true;
+    });
+  };
+
+  // OPTIMIZED: Memoize deduplicated bugs to avoid recalculation on every render
+  const deduplicatedBugs = useMemo(() => {
+    const seen = new Set();
+    return filteredBugs.filter(bug => {
       // Use _id for uniqueness to allow multiple bugs with same PIMS
       const uniqueKey = bug._id;
 
@@ -531,27 +563,20 @@ const BugList = () => {
       seen.add(uniqueKey);
       return true;
     });
-  };
+  }, [filteredBugs]);
 
-  // Get bugs for current page when filters are active
-  const getDisplayedBugs = () => {
-    let bugsToDisplay = filteredBugs;
-
-    // Remove duplicates based on PIMS numbers
-    bugsToDisplay = removeDuplicatesByPims(bugsToDisplay);
-
-    // Always use client-side pagination since we fetch all data and deduplicate
-    const currentPageToUse = hasActiveFilters() ? filteredPage : currentPage;
+  // OPTIMIZED: Memoize displayed bugs for current page
+  const displayedBugs = useMemo(() => {
+    const currentPageToUse = hasFiltersActive ? filteredPage : currentPage;
     const startIndex = (currentPageToUse - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
-    return bugsToDisplay.slice(startIndex, endIndex);
-  };
-  
-  // Get pagination info for filtered results
-  const getFilteredPaginationInfo = () => {
-    const deduplicatedBugs = removeDuplicatesByPims(filteredBugs);
+    return deduplicatedBugs.slice(startIndex, endIndex);
+  }, [deduplicatedBugs, currentPage, filteredPage, hasFiltersActive]);
+
+  // OPTIMIZED: Memoize pagination info to avoid recalculation
+  const paginationInfo = useMemo(() => {
     const totalPages = Math.ceil(deduplicatedBugs.length / itemsPerPage);
-    const currentPageToUse = hasActiveFilters() ? filteredPage : currentPage;
+    const currentPageToUse = hasFiltersActive ? filteredPage : currentPage;
 
     return {
       totalPages: totalPages,
@@ -560,11 +585,10 @@ const BugList = () => {
       hasNextPage: currentPageToUse < totalPages,
       hasPrevPage: currentPageToUse > 1
     };
-  };
+  }, [deduplicatedBugs.length, currentPage, filteredPage, hasFiltersActive]);
 
   const getPageNumbers = () => {
     const pages = [];
-    const paginationInfo = getFilteredPaginationInfo();
     const totalPages = paginationInfo.totalPages;
     const currentPageNum = paginationInfo.currentPage;
 
@@ -1163,15 +1187,15 @@ const BugList = () => {
               </Box>
 
             </Paper>
-            {getDisplayedBugs().length === 0 ? (
+            {displayedBugs.length === 0 ? (
               <div className="no-data">
-                {bugs.length === 0 ? 
+                {bugs.length === 0 ?
                   "No bug records found. Click \"Add New Bug\" to create one." :
                   "No bugs match your search criteria. Try adjusting your filters."
                 }
               </div>
             ) : (
-              getDisplayedBugs().map((bug) => (
+              displayedBugs.map((bug) => (
                   <Card key={bug._id} className="bug-card-hover" sx={{
                     borderRadius: '12px',
                     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
@@ -1829,12 +1853,11 @@ const BugList = () => {
           
           {/* Pagination Controls */}
           {(() => {
-            const paginationInfo = getFilteredPaginationInfo();
             return paginationInfo.totalPages > 1 && (
               <div className="pagination-container">
                 <div className="pagination-single-line">
                   <span className="pagination-info-inline">
-                    {hasActiveFilters() ? 
+                    {hasFiltersActive ?
                       `Showing ${((paginationInfo.currentPage - 1) * itemsPerPage) + 1}-${Math.min(paginationInfo.currentPage * itemsPerPage, paginationInfo.totalItems)} of ${paginationInfo.totalItems} filtered results` :
                       `Showing ${((paginationInfo.currentPage - 1) * itemsPerPage) + 1}-${Math.min(paginationInfo.currentPage * itemsPerPage, paginationInfo.totalItems)} of ${paginationInfo.totalItems}`
                     }
@@ -1910,7 +1933,7 @@ const BugList = () => {
                 fontWeight: 500,
                 color: '#6b7280'
               }}>
-                {pagination.totalBugs || bugs.length} Bugs{hasActiveFilters() ? ` (${filteredBugs.length} shown)` : ''}
+                {pagination.totalBugs || bugs.length} Bugs{hasFiltersActive ? ` (${filteredBugs.length} shown)` : ''}
               </Typography>
             </Typography>
 

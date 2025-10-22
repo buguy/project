@@ -37,6 +37,8 @@ const BugModal = ({ bug, onSave, onClose }) => {
   const [correcting, setCorrecting] = useState(false);
   const [chineseTranslation, setChineseTranslation] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [deletingMeetingIndex, setDeletingMeetingIndex] = useState(null);
+  const [deletingCommentIndex, setDeletingCommentIndex] = useState(null);
 
   // Check if PIMS starts with "PIMS-" to disable fields
   const isPimsLocked = formData.pims && formData.pims.toLowerCase().startsWith('pims-');
@@ -52,6 +54,9 @@ const BugModal = ({ bug, onSave, onClose }) => {
   }, []);
 
   useEffect(() => {
+    console.log('🟡 useEffect triggered - bug updated:', bug?.notes?.substring(0, 100));
+    console.log('🟡 Full bug object:', bug);
+
     // Get current user from server endpoint
     const getCurrentUser = async () => {
       const token = localStorage.getItem('token');
@@ -70,6 +75,7 @@ const BugModal = ({ bug, onSave, onClose }) => {
     };
 
     if (bug) {
+      console.log('🟡 Setting formData with bug.notes:', bug.notes?.substring(0, 100));
       setFormData({
         status: bug.status || '',
         tcid: bug.tcid || '',
@@ -201,6 +207,9 @@ Expectation: `;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log('🔵 handleSubmit called');
+    console.log('🔵 isCommentMode:', isCommentMode);
+    console.log('🔵 newComment:', newComment);
     setError('');
     setLoading(true);
 
@@ -211,18 +220,21 @@ Expectation: `;
       };
 
       if (isCommentMode) {
+        console.log('🔵 In comment mode');
         // Comment mode: append new comment to existing notes
         if (!newComment.trim()) {
+          console.log('🔴 Comment is empty');
           setError('Please enter a comment');
           setLoading(false);
           return;
         }
+        console.log('🟢 Comment validation passed');
 
         const currentUser = await getCurrentUser();
         const timestamp = new Date().toLocaleString();
         const commentWithHeader = `[${timestamp} - ${currentUser}]: ${newComment.trim()}`;
-        
-        const updatedNotes = bug.notes 
+
+        const updatedNotes = bug.notes
           ? `${commentWithHeader}\n\n${bug.notes}`
           : commentWithHeader;
 
@@ -230,10 +242,12 @@ Expectation: `;
           notes: updatedNotes
         };
 
-        await axios.put(`/api/bugs/${bug._id}`, submitData, config);
+        console.log('🟢 Sending API request to update bug:', bug._id);
+        const response = await axios.put(`/api/bugs/${bug._id}`, submitData, config);
+        console.log('🟢 API request successful');
 
-        // Create updated bug object locally for immediate UI update
-        const updatedBugLocal = {
+        // Use the updated bug object from server response
+        const updatedBugLocal = response.data.bug || {
           ...bug,
           notes: updatedNotes
         };
@@ -243,7 +257,9 @@ Expectation: `;
         setNewComment('');
 
         // Pass the updated bug back to parent with comment flag but don't close modal
+        console.log('🟢 Calling onSave with updated bug:', updatedBugLocal.notes?.substring(0, 100));
         onSave(updatedBugLocal, true, false); // false = don't close modal
+        console.log('🟢 onSave completed');
         return;
       } else if (isMeetingMode) {
         // Meeting mode: append new meeting note to existing meetings
@@ -265,10 +281,10 @@ Expectation: `;
           meetings: updatedMeetings
         };
 
-        await axios.put(`/api/bugs/${bug._id}`, submitData, config);
+        const response = await axios.put(`/api/bugs/${bug._id}`, submitData, config);
 
-        // Create updated bug object locally for immediate UI update
-        const updatedBugLocal = {
+        // Use the updated bug object from server response
+        const updatedBugLocal = response.data.bug || {
           ...bug,
           meetings: updatedMeetings
         };
@@ -381,6 +397,80 @@ Expectation: `;
     }
   };
 
+  const handleDeleteMeeting = async (indexToDelete) => {
+    setDeletingMeetingIndex(indexToDelete);
+    setError('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const config = {
+        headers: { Authorization: `Bearer ${token}` }
+      };
+
+      // Split meetings into array, remove the one at indexToDelete, and rejoin
+      const meetingsArray = bug.meetings.split('\n\n').filter(meeting => meeting.trim());
+      const updatedMeetingsArray = meetingsArray.filter((_, index) => index !== indexToDelete);
+      const updatedMeetings = updatedMeetingsArray.join('\n\n');
+
+      const submitData = {
+        meetings: updatedMeetings
+      };
+
+      const response = await axios.put(`/api/bugs/${bug._id}`, submitData, config);
+
+      // Use the updated bug object from server response
+      const updatedBugLocal = response.data.bug || {
+        ...bug,
+        meetings: updatedMeetings
+      };
+
+      // Pass the updated bug back to parent with meeting flag but don't close modal
+      onSave(updatedBugLocal, true, false); // false = don't close modal
+    } catch (error) {
+      console.error('Delete meeting error:', error);
+      setError(error.response?.data?.message || 'Failed to delete meeting note');
+    } finally {
+      setDeletingMeetingIndex(null);
+    }
+  };
+
+  const handleDeleteComment = async (indexToDelete) => {
+    setDeletingCommentIndex(indexToDelete);
+    setError('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const config = {
+        headers: { Authorization: `Bearer ${token}` }
+      };
+
+      // Split comments into array, remove the one at indexToDelete, and rejoin
+      const commentsArray = bug.notes.split('\n\n').filter(comment => comment.trim());
+      const updatedCommentsArray = commentsArray.filter((_, index) => index !== indexToDelete);
+      const updatedComments = updatedCommentsArray.join('\n\n');
+
+      const submitData = {
+        notes: updatedComments
+      };
+
+      const response = await axios.put(`/api/bugs/${bug._id}`, submitData, config);
+
+      // Use the updated bug object from server response
+      const updatedBugLocal = response.data.bug || {
+        ...bug,
+        notes: updatedComments
+      };
+
+      // Pass the updated bug back to parent with comment flag but don't close modal
+      onSave(updatedBugLocal, true, false); // false = don't close modal
+    } catch (error) {
+      console.error('Delete comment error:', error);
+      setError(error.response?.data?.message || 'Failed to delete comment');
+    } finally {
+      setDeletingCommentIndex(null);
+    }
+  };
+
 
   const handleOverlayClick = (e) => {
     // Prevent closing when clicking outside the form
@@ -443,6 +533,15 @@ Expectation: `;
                           <div className="comment-content" style={{ whiteSpace: 'pre-line' }}>
                             {comment.trim()}
                           </div>
+                          <button
+                            type="button"
+                            className="delete-comment-btn"
+                            onClick={() => handleDeleteComment(index)}
+                            disabled={deletingCommentIndex === index}
+                            title="Delete this comment"
+                          >
+                            {deletingCommentIndex === index ? '...' : '×'}
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -471,13 +570,13 @@ Expectation: `;
                     onChange={(e) => setNewComment(e.target.value)}
                     rows="4"
                     placeholder="Type your comment here..."
-                    required
                   />
                   <div className="input-helper">
                     <button
-                      type="submit"
+                      type="button"
                       className="add-comment-btn"
                       disabled={loading || !newComment.trim()}
+                      onClick={(e) => handleSubmit(e)}
                     >
                       {loading ? 'Adding...' : 'Add'}
                     </button>
@@ -531,6 +630,15 @@ Expectation: `;
                           <div className="comment-content" style={{ whiteSpace: 'pre-line' }}>
                             {meeting.trim()}
                           </div>
+                          <button
+                            type="button"
+                            className="delete-comment-btn"
+                            onClick={() => handleDeleteMeeting(index)}
+                            disabled={deletingMeetingIndex === index}
+                            title="Delete this meeting note"
+                          >
+                            {deletingMeetingIndex === index ? '...' : '×'}
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -559,13 +667,13 @@ Expectation: `;
                     onChange={(e) => setNewMeeting(e.target.value)}
                     rows="4"
                     placeholder="Type your meeting notes here..."
-                    required
                   />
                   <div className="input-helper">
                     <button
-                      type="submit"
+                      type="button"
                       className="add-comment-btn"
                       disabled={loading || !newMeeting.trim()}
+                      onClick={(e) => handleSubmit(e)}
                     >
                       {loading ? 'Adding...' : 'Add'}
                     </button>
@@ -652,6 +760,8 @@ Expectation: `;
               />
             </div>
           </div>
+
+          <div className="form-divider"></div>
 
           <div className="form-group required">
             <label>Product/Customer/Likelihood</label>

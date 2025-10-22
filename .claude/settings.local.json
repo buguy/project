@@ -20,7 +20,12 @@
       "WebFetch(domain:github.com)",
       "Bash(taskkill:*)",
       "Bash(rm:*)",
-      "Bash(npm test:*)"
+      "Bash(npm test:*)",
+      "Bash(tasklist)",
+      "Bash(findstr \"node\")",
+      "mcp__smithery-ai-server-sequential-thinking__sequentialthinking",
+      "Bash(findstr 13680)",
+      "Bash(powershell -Command \"Get-Process -Id 13680 | Select-Object Name, Id, Path\")"
     ],
     "deny": []
   }

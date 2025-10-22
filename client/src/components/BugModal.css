@@ -186,6 +186,7 @@
 }
 
 .comment-item {
+  position: relative;
   padding: 0.75rem;
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-primary);
@@ -200,6 +201,10 @@
   box-shadow: var(--shadow-md);
 }
 
+.comment-item:hover .delete-comment-btn {
+  opacity: 1;
+}
+
 .comment-item:last-child {
   margin-bottom: 0;
 }
@@ -208,6 +213,44 @@
   color: var(--text-secondary);
   line-height: 1.5;
   font-size: 0.9rem;
+  padding-right: 2rem;
+}
+
+.delete-comment-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.2s ease;
+}
+
+.delete-comment-btn:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+}
+
+.delete-comment-btn:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.delete-comment-btn:disabled:hover {
+  transform: none;
+  box-shadow: none;
 }
 
 .no-comments-placeholder {
@@ -553,11 +596,21 @@ body.modal-open {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+/* Add extra margin after the last form-row (Date/Stage) */
+.form-row:last-of-type {
   margin-bottom: 1.5rem;
 }
 
 .form-group {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+/* Reduce vertical spacing for Status to Stage form rows */
+.form-row .form-group {
+  margin-bottom: 0;
 }
 
 .form-group label {
