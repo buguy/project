@@ -172,12 +172,48 @@ const BugList = () => {
     // Set up polling interval
     const pollInterval = setInterval(() => {
       console.log('🔄 Auto-refreshing bug list...');
-      fetchBugs(currentPage, false, 0);
+      // Refresh current page data
+      const page = currentPage;
+      const refreshBugs = async () => {
+        try {
+          const response = await axios.get('/api/bugs', {
+            headers: { Authorization: `Bearer ${token}` },
+            params: {
+              all: 'true',
+              ...(searchQuery && { search: searchQuery }),
+              ...(selectedPims && { pims: selectedPims }),
+              ...(selectedTester && { tester: selectedTester }),
+              ...(selectedStatus && { status: selectedStatus }),
+              ...(selectedStage && { stage: selectedStage }),
+              ...(startDate && { startDate }),
+              ...(endDate && { endDate })
+            },
+            timeout: 10000
+          });
+          setBugs(response.data.bugs);
+          setFilteredBugs(response.data.bugs);
+          setLastRefresh(new Date());
+
+          // Update pagination
+          const deduplicatedBugs = removeDuplicatesByPims(response.data.bugs);
+          const totalPages = Math.ceil(deduplicatedBugs.length / itemsPerPage);
+          setPagination({
+            totalBugs: deduplicatedBugs.length,
+            totalPages: totalPages,
+            currentPage: page,
+            hasNextPage: page < totalPages,
+            hasPrevPage: page > 1
+          });
+        } catch (error) {
+          console.error('Auto-refresh error:', error);
+        }
+      };
+      refreshBugs();
     }, 30000); // 30 seconds
 
     // Cleanup interval on unmount
     return () => clearInterval(pollInterval);
-  }, [currentPage]); // Re-setup interval when page changes
+  }, [currentPage, searchQuery, selectedPims, selectedTester, selectedStatus, selectedStage, startDate, endDate, itemsPerPage]); // Include all dependencies
 
   const fetchCurrentUser = async () => {
     try {
