@@ -209,16 +209,13 @@ Expectation: `;
     );
   };
 
-  // Manual convert button handler
-  const convertLinkPath = (id) => {
+  // Convert all link paths at once
+  const convertAllLinkPaths = () => {
     setLinkFields(prev =>
-      prev.map(field => {
-        if (field.id === id) {
-          const converted = convertMacToWindowsPath(field.value);
-          return { ...field, value: converted };
-        }
-        return field;
-      })
+      prev.map(field => ({
+        ...field,
+        value: convertMacToWindowsPath(field.value)
+      }))
     );
   };
 
@@ -964,16 +961,27 @@ Expectation: `;
             <div className="links-section">
               <div className="links-header">
                 <label>Links</label>
-                <button
-                  type="button"
-                  onClick={addLinkField}
-                  className="add-link-btn"
-                  title="Add Link"
-                                  >
-                  +
-                </button>
+                <div className="links-header-buttons">
+                  <button
+                    type="button"
+                    onClick={convertAllLinkPaths}
+                    className="convert-all-paths-btn"
+                    title="Convert all paths to Windows format"
+                    disabled={linkFields.length === 0}
+                                      >
+                    🔄 Convert
+                  </button>
+                  <button
+                    type="button"
+                    onClick={addLinkField}
+                    className="add-link-btn"
+                    title="Add Link"
+                                      >
+                    +
+                  </button>
+                </div>
               </div>
-              
+
               {linkFields.length === 0 ? (
                 <div className="no-links-message">
                   Click the + button to add link fields
@@ -988,14 +996,6 @@ Expectation: `;
                       onPaste={(e) => handleLinkPaste(field.id, e)}
                       placeholder="&quot;\\sdqa-server\Windows\Log&quot;"
                                           />
-                    <button
-                      type="button"
-                      onClick={() => convertLinkPath(field.id)}
-                      className="convert-path-btn"
-                      title="Convert Mac path to Windows format"
-                                          >
-                      <span className="convert-icon">🔄</span>
-                    </button>
                     <button
                       type="button"
                       onClick={() => removeLinkField(field.id)}
