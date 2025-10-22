@@ -969,7 +969,7 @@ Expectation: `;
                     title="Convert all paths to Windows format"
                     disabled={linkFields.length === 0}
                                       >
-                    🔄 Convert
+                    Convert Path
                   </button>
                   <button
                     type="button"
