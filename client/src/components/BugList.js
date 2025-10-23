@@ -1238,18 +1238,6 @@ const BugList = () => {
                           Add New Bug
                         </Typography>
                       </Box>
-
-                      {/* Last Updated Indicator */}
-                      <Typography sx={{
-                        fontSize: '10px',
-                        color: '#64748b',
-                        fontStyle: 'italic',
-                        whiteSpace: 'nowrap',
-                        marginLeft: 'auto',
-                        paddingLeft: '12px'
-                      }}>
-                        Updated: {lastRefresh.toLocaleTimeString()}
-                      </Typography>
                     </Box>
                   );
                 })()}
@@ -1997,13 +1985,23 @@ const BugList = () => {
                 <FilterListIcon sx={{ color: '#6b7280' }} />
                 Filter
               </Box>
-              <Typography variant="body2" sx={{
-                fontSize: '14px',
-                fontWeight: 500,
-                color: '#6b7280'
-              }}>
-                {pagination.totalBugs || bugs.length} Bugs{hasFiltersActive ? ` (${filteredBugs.length} shown)` : ''}
-              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                <Typography variant="body2" sx={{
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  color: '#6b7280'
+                }}>
+                  {pagination.totalBugs || bugs.length} Bugs{hasFiltersActive ? ` (${filteredBugs.length} shown)` : ''}
+                </Typography>
+                <Typography sx={{
+                  fontSize: '10px',
+                  color: '#64748b',
+                  fontStyle: 'italic',
+                  whiteSpace: 'nowrap'
+                }}>
+                  Updated: {lastRefresh.toLocaleTimeString()}
+                </Typography>
+              </Box>
             </Typography>
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
