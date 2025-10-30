@@ -25,7 +25,8 @@
       "Bash(findstr \"node\")",
       "mcp__smithery-ai-server-sequential-thinking__sequentialthinking",
       "Bash(findstr 13680)",
-      "Bash(powershell -Command \"Get-Process -Id 13680 | Select-Object Name, Id, Path\")"
+      "Bash(powershell -Command \"Get-Process -Id 13680 | Select-Object Name, Id, Path\")",
+      "Bash(git push:*)"
     ],
     "deny": []
   }

@@ -340,14 +340,20 @@ app.get('/api/bugs', authenticateToken, async (req, res) => {
       // This is a temporary solution - ideally dates should be Date objects in DB
     }
 
-    // PERFORMANCE OPTIMIZATION: Limit maximum documents fetched
-    const MAX_FETCH_LIMIT = fetchAll ? 2000 : limit * 2; // Fetch only what's needed
+    // PERFORMANCE OPTIMIZATION: Limit maximum documents fetched when not fetching all
+    const MAX_FETCH_LIMIT = fetchAll ? 0 : limit * 2; // 0 means no limit when fetchAll is true
 
     // Use MongoDB sorting and limiting for better performance
-    let bugs = await Bug.find(searchQuery)
+    let queryBuilder = Bug.find(searchQuery)
       .sort({ createdAt: -1, _id: -1 }) // Sort by createdAt first (indexed), then _id
-      .limit(MAX_FETCH_LIMIT)
       .lean(); // Use lean() for better performance (returns plain objects)
+
+    // Only apply limit if not fetching all
+    if (MAX_FETCH_LIMIT > 0) {
+      queryBuilder = queryBuilder.limit(MAX_FETCH_LIMIT);
+    }
+
+    let bugs = await queryBuilder;
 
     // Filter by date range if provided (after retrieval due to mixed formats)
     if (startDate || endDate) {

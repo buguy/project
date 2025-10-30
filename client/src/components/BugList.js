@@ -106,24 +106,7 @@ const BugList = () => {
   // Debounce timeout reference
   const debounceTimeout = React.useRef(null);
 
-  // Custom debounce hook for performance optimization
-  const useDebounce = (value, delay) => {
-    const [debouncedValue, setDebouncedValue] = useState(value);
 
-    useEffect(() => {
-      const handler = setTimeout(() => {
-        setDebouncedValue(value);
-      }, delay);
-
-      return () => clearTimeout(handler);
-    }, [value, delay]);
-
-    return debouncedValue;
-  };
-
-  // Debounced filter values to reduce API calls
-  const debouncedSearchQuery = useDebounce(searchQuery, 500);
-  const debouncedPims = useDebounce(selectedPims, 500);
 
   // OPTIMIZED: Single-pass status counts calculation
   const statusCounts = useMemo(() => {
@@ -328,7 +311,7 @@ const BugList = () => {
 
   // Manual search function (triggered by button click or Enter key)
   const performSearch = useCallback(() => {
-    const hasFilters = debouncedSearchQuery || selectedTester || selectedStatus || debouncedPims || selectedStage || startDate || endDate;
+    const hasFilters = searchQuery || selectedTester || selectedStatus || selectedPims || selectedStage || startDate || endDate;
 
     if (hasFilters) {
       fetchBugs(1, true);
@@ -336,27 +319,7 @@ const BugList = () => {
       fetchBugs(1, false);
     }
     setCurrentPage(1);
-  }, [debouncedSearchQuery, selectedTester, selectedStatus, debouncedPims, selectedStage, startDate, endDate]);
-
-  // OPTIMIZED: Trigger search with debounced values for text inputs
-  useEffect(() => {
-    if (loading) return;
-
-    // Skip API calls if this is a status bar filter - we'll handle it locally
-    if (isStatusBarFilter) {
-      setIsStatusBarFilter(false); // Reset the flag
-      return;
-    }
-
-    const hasFilters = debouncedSearchQuery || selectedTester || selectedStatus || debouncedPims || selectedStage || startDate || endDate;
-
-    if (hasFilters) {
-      fetchBugs(1, true);
-    } else {
-      fetchBugs(1, false);
-    }
-    setCurrentPage(1);
-  }, [debouncedSearchQuery, debouncedPims, selectedTester, selectedStatus, selectedStage, startDate, endDate]);
+  }, [searchQuery, selectedTester, selectedStatus, selectedPims, selectedStage, startDate, endDate]);
 
   const handleAddBug = () => {
     setEditingBug(null);
