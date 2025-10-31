@@ -192,6 +192,7 @@ const BugList = () => {
         }
       };
       refreshBugs();
+      fetchOperationLogs();
     }, 30000); // 30 seconds
 
     // Cleanup interval on unmount
@@ -497,7 +498,8 @@ const BugList = () => {
         setEditingBug({ ...updatedBug, isCommentMode: editingBug?.isCommentMode, isMeetingMode: editingBug?.isMeetingMode });
       }
 
-      // Don't fetch operation logs for comments/meetings to avoid any loading
+      // Fetch operation logs for comments/meetings as well
+      fetchOperationLogs();
       return;
     }
 

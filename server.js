@@ -729,9 +729,23 @@ app.get('/api/backup', authenticateToken, async (req, res) => {
     console.log('Starting database backup...');
 
     // Get all collections data
-    const bugs = await Bug.find({}).lean();
-    const users = await User.find({}).select('-password').lean(); // Exclude passwords
-    const logs = await OperationLog.find({}).lean();
+    const bugsRaw = await Bug.find({}).lean();
+    const usersRaw = await User.find({}).select('-password').lean(); // Exclude passwords
+    const logsRaw = await OperationLog.find({}).lean();
+
+    // Manually convert ObjectId to string for proper JSON serialization
+    const convertIds = (doc) => {
+      if (doc._id) {
+        doc._id = doc._id.toString();
+      }
+      // Also check for any other potential ObjectId fields if they exist in schemas
+      // For now, only _id is confirmed as an ObjectId from the lean query
+      return doc;
+    };
+
+    const bugs = bugsRaw.map(convertIds);
+    const users = usersRaw.map(convertIds);
+    const logs = logsRaw.map(convertIds);
 
     console.log(`Backup data retrieved: ${bugs.length} bugs, ${users.length} users, ${logs.length} logs`);
 
