@@ -163,8 +163,19 @@ Expectation: `;
     // Remove leading/trailing whitespace
     let converted = path.trim();
 
+    // Check if it's a Mac SMB path (starts with smb://)
+    if (converted.toLowerCase().startsWith('smb://')) {
+      // Remove smb:// prefix (case insensitive)
+      converted = converted.replace(/^smb:\/\//i, '');
+
+      // Replace forward slashes with backslashes
+      converted = converted.replace(/\//g, '\\');
+
+      // Add UNC prefix and wrap in quotes
+      converted = `"\\\\${converted}"`;
+    }
     // Check if it's a Mac path (starts with /Volumes/)
-    if (converted.startsWith('/Volumes/')) {
+    else if (converted.startsWith('/Volumes/')) {
       // Remove /Volumes/ prefix
       converted = converted.replace(/^\/Volumes\//, '');
 
@@ -176,7 +187,7 @@ Expectation: `;
         // Rest is the path
         const restPath = parts.slice(1).join('\\');
 
-        // Construct Windows UNC path
+        // Construct Windows UNC path (using SDQA-SEVER as default server)
         converted = `"\\\\SDQA-SEVER\\${shareName}\\${restPath}"`;
       }
     }
